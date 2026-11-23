@@ -1,11 +1,13 @@
-# Builds a signed release APK and attaches it to a GitHub Release
-# whenever a version tag like "v2.0.3" is pushed.
+# Builds a signed release APK.
+# - Tag push "v*": creates a GitHub release with the APK.
+# - Manual run ("Run workflow"): APK is attached to the run as an artifact.
 name: Release APK
 
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write   # needed to create the release
@@ -14,15 +16,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
       # No wrapper jar in the repo: use a fixed Gradle version instead.
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: "9.6.0"
 
@@ -47,13 +49,22 @@ jobs:
       - name: Rename APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/NC-Todo-${GITHUB_REF_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "dist/NC-Todo-${GITHUB_REF_NAME//\//-}.apk"
 
       - name: Remove signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
 
-      - uses: softprops/action-gh-release@v2
+      # Manual runs: APK only as a download in the run (no release)
+      - uses: actions/upload-artifact@v5
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: NC-Todo-test-apk
+          path: dist/*.apk
+
+      # Tag pushes: create the GitHub release with the APK
+      - uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: dist/*.apk
           generate_release_notes: true
