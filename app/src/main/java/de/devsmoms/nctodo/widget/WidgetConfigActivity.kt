@@ -44,6 +44,7 @@ import de.devsmoms.nctodo.NcTodoApp
 import de.devsmoms.nctodo.ui.ListIcons
 import de.devsmoms.nctodo.ui.Selection
 import de.devsmoms.nctodo.ui.SmartList
+import de.devsmoms.nctodo.ui.forDisplay
 import de.devsmoms.nctodo.ui.theme.NcTodoTheme
 import de.devsmoms.nctodo.ui.theme.parseColor
 import kotlinx.coroutines.launch
@@ -82,7 +83,8 @@ class WidgetConfigActivity : ComponentActivity() {
 
         setContent {
             val settings by c.settings.collectAsState()
-            val data by c.repository.data.collectAsState()
+            val allData by c.repository.data.collectAsState()
+            val data = allData.forDisplay(settings.hideDeckLists)
             val options = listOf(
                 Option(Selection.Smart(SmartList.MY_DAY), SmartList.MY_DAY.title, Icons.Outlined.WbSunny, Color(0xFF9E7B00)),
                 Option(Selection.Smart(SmartList.IMPORTANT), SmartList.IMPORTANT.title, Icons.Outlined.StarBorder, Color(0xFFC2185B)),

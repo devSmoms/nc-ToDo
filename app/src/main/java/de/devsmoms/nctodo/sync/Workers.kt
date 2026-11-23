@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import de.devsmoms.nctodo.NcTodoApp
 import de.devsmoms.nctodo.dav.AuthException
 import de.devsmoms.nctodo.data.Settings
+import de.devsmoms.nctodo.ui.forDisplay
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -31,7 +32,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         return try {
             val changes = c.repository.sync(pushOnly)
             if (!pushOnly && c.settings.value.notifySharedChanges && !AppVisibility.inForeground) {
-                c.notifier.showShared(changes)
+                val hideDeck = c.settings.value.hideDeckLists
+                c.notifier.showShared(changes.filterNot { hideDeck && it.listName.trimStart().startsWith("Deck:", ignoreCase = true) })
             }
             val stillPending = c.repository.data.value.pending.isNotEmpty()
             if (c.repository.status.value.offline && stillPending) Result.retry() else Result.success()
@@ -53,7 +55,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         if (!c.isLoggedIn() || !settings.notifyDue) return Result.success()
         c.awaitLoaded()
         val today = LocalDate.now()
-        val data = c.repository.data.value
+        val data = c.repository.data.value.forDisplay(settings.hideDeckLists)
         val due = data.tasks.values.flatten()
             .filter { t -> !t.todo.completed && t.todo.parentUid == null && t.todo.due?.let { !it.isAfter(today) } == true }
             .sortedBy { it.todo.due }

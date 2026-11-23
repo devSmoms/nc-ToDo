@@ -2,6 +2,7 @@ package de.devsmoms.nctodo.ui
 
 import de.devsmoms.nctodo.data.TaskItem
 import de.devsmoms.nctodo.data.TaskList
+import de.devsmoms.nctodo.sync.LocalData
 import java.time.LocalDate
 
 /**
@@ -48,4 +49,18 @@ fun List<TaskList>.defaultTarget(): TaskList? {
 fun selectionTitle(selection: Selection, lists: List<TaskList>): String = when (selection) {
     is Selection.Smart -> selection.kind.title
     is Selection.OfList -> lists.firstOrNull { it.url == selection.url }?.let { ListIcons.label(it.name) } ?: "Liste"
+}
+
+/** Lists Nextcloud Deck creates for its boards are named "Deck: <board>". */
+fun TaskList.isDeckList(): Boolean = ListIcons.label(name).trimStart().startsWith("Deck:", ignoreCase = true)
+
+/**
+ * The data as shown to the user: with [hideDeck], Deck board lists and their tasks are
+ * left out everywhere (menu, smart lists, widget, quick add, reminders). Sync is unaffected.
+ */
+fun LocalData.forDisplay(hideDeck: Boolean): LocalData {
+    if (!hideDeck) return this
+    val hidden = lists.filter { it.isDeckList() }.map { it.url }.toSet()
+    if (hidden.isEmpty()) return this
+    return copy(lists = lists.filterNot { it.url in hidden }, tasks = tasks.filterKeys { it !in hidden })
 }

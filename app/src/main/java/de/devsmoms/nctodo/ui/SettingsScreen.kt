@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.ViewKanban
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.People
@@ -210,6 +211,14 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
                         subtitle = "Rückfrage beim Entfernen von Links, Fälligkeit und Schritten",
                         onClick = { vm.updateSettings { it.copy(confirmRemovals = !it.confirmRemovals) } },
                         trailing = { Switch(checked = s.confirmRemovals, onCheckedChange = { on -> vm.updateSettings { it.copy(confirmRemovals = on) } }) },
+                    )
+                    RowDivider()
+                    SettingRow(
+                        icon = Icons.Outlined.ViewKanban, tint = accent,
+                        title = "Deck-Listen ausblenden",
+                        subtitle = "Listen, deren Name mit „Deck:“ beginnt (Boards aus Nextcloud Deck)",
+                        onClick = { vm.updateSettings { it.copy(hideDeckLists = !it.hideDeckLists) } },
+                        trailing = { Switch(checked = s.hideDeckLists, onCheckedChange = { on -> vm.updateSettings { it.copy(hideDeckLists = on) } }) },
                     )
                     RowDivider()
                     SettingRow(

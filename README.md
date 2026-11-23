@@ -21,6 +21,7 @@ Android-App für Nextcloud-Aufgaben (CalDAV/VTODO), bedient sich ähnlich wie Mi
 - **Links**: beliebig viele pro Aufgabe (gespeichert als ATTACH), angezeigt als Vorschaukarte mit Titel und Bild; Link aus der Zwischenablage wird vorgeschlagen. Vorschau abschaltbar
 - **Zuständige Person**: eine Person aus der Freigabe der Liste (gespeichert als ATTENDEE ohne ORGANIZER – Nextcloud verschickt dadurch keine Einladungs-Mails)
 - **Listenbeschreibung** (calendar-description), unter dem Listentitel angezeigt
+- **Deck-Listen ausblenden**: Listen, die Nextcloud Deck für seine Boards anlegt („Deck: …“), werden standardmäßig überall ausgeblendet (abschaltbar)
 - **Papierkorb** (Nextcloud 22+): gelöschte Aufgaben und Listen wiederherstellen oder endgültig löschen
 - Zum Aktualisieren nach unten ziehen; Änderungen erscheinen sofort und werden im Hintergrund gespeichert
 - **Offline nutzbar**: alle Listen und Aufgaben liegen verschlüsselt auf dem Gerät. Aufgaben anlegen, bearbeiten, abhaken und löschen geht auch ohne Netz; die Änderungen werden übertragen, sobald wieder eine Verbindung besteht (auch bei geschlossener App). Bei gleichzeitigen Änderungen werden nur die selbst geänderten Felder auf die Server-Version übertragen, Änderungen anderer bleiben erhalten.

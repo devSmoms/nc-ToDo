@@ -61,6 +61,7 @@ import de.devsmoms.nctodo.ui.DueValue
 import de.devsmoms.nctodo.ui.ListIcons
 import de.devsmoms.nctodo.ui.TaskQuickOptions
 import de.devsmoms.nctodo.ui.defaultTarget
+import de.devsmoms.nctodo.ui.forDisplay
 import de.devsmoms.nctodo.ui.theme.NcTodoTheme
 import de.devsmoms.nctodo.ui.theme.parseColor
 import kotlinx.coroutines.launch
@@ -87,7 +88,7 @@ class QuickAddActivity : ComponentActivity() {
                     allDayDefault = settings.allDayDefault,
                     ready = ready,
                     loggedIn = account != null,
-                    lists = data.lists.filter { it.canWrite },
+                    lists = data.forDisplay(settings.hideDeckLists).lists.filter { it.canWrite },
                     presetListUrl = presetList,
                     onCancel = { finish() },
                     onOpenApp = {

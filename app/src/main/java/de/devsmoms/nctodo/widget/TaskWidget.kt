@@ -57,6 +57,7 @@ import de.devsmoms.nctodo.sync.TaskFields
 import de.devsmoms.nctodo.ui.ListIcons
 import de.devsmoms.nctodo.ui.Selection
 import de.devsmoms.nctodo.ui.defaultTarget
+import de.devsmoms.nctodo.ui.forDisplay
 import de.devsmoms.nctodo.ui.formatDue
 import de.devsmoms.nctodo.ui.isOverdue
 import de.devsmoms.nctodo.ui.selectionTitle
@@ -81,7 +82,9 @@ class TaskWidget : GlanceAppWidget() {
         val c = (context.applicationContext as NcTodoApp).container
         c.awaitLoaded()
         provideContent {
-            val data by c.repository.data.collectAsState()
+            val allData by c.repository.data.collectAsState()
+            val settings by c.settings.collectAsState()
+            val data = allData.forDisplay(settings.hideDeckLists)
             val account by c.account.collectAsState()
             val selection = Selection.decode(currentState(WidgetSelectionKey)) ?: Selection.DEFAULT
             val openAppOnTap = currentState(WidgetOpenAppKey) ?: false

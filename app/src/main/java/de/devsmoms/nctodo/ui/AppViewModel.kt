@@ -121,7 +121,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val undoEvents = Channel<UndoEvent>(Channel.BUFFERED)
     val undoFlow = undoEvents.receiveAsFlow()
 
-    val state: StateFlow<UiState> = combine(c.account, repo.data, repo.status, c.settings, local) { account, data, status, settings, ui ->
+    val state: StateFlow<UiState> = combine(c.account, repo.data, repo.status, c.settings, local) { account, allData, status, settings, ui ->
+        val data = allData.forDisplay(settings.hideDeckLists)
         val sel = ui.selection
         val validSel = if (sel is Selection.OfList && data.list(sel.url) == null && data.lists.isNotEmpty()) Selection.Smart(SmartList.MY_DAY) else sel
         UiState(
@@ -132,7 +133,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             syncing = status.running,
             offline = status.offline,
             lastSync = status.lastSuccess ?: data.lastSync,
-            pendingCount = data.pending.size,
+            pendingCount = allData.pending.size,
             lists = data.lists,
             tasks = data.tasks,
             selection = validSel,

@@ -33,6 +33,8 @@ data class Settings(
     val linkPreviews: Boolean = true,
     /** Ask before removing a link, a due date or a step. */
     val confirmRemovals: Boolean = true,
+    /** Hide the lists Nextcloud Deck creates for its boards ("Deck: …"). */
+    val hideDeckLists: Boolean = true,
 ) {
     companion object {
         const val START_LAST = "last"
@@ -77,6 +79,7 @@ class SettingsStore(context: Context) {
             allDayDefault = prefs.getBoolean("allDayDefault", d.allDayDefault),
             linkPreviews = prefs.getBoolean("linkPreviews", d.linkPreviews),
             confirmRemovals = prefs.getBoolean("confirmRemovals", d.confirmRemovals),
+            hideDeckLists = prefs.getBoolean("hideDeckLists", d.hideDeckLists),
         )
     }
 
@@ -95,6 +98,7 @@ class SettingsStore(context: Context) {
             .putBoolean("allDayDefault", s.allDayDefault)
             .putBoolean("linkPreviews", s.linkPreviews)
             .putBoolean("confirmRemovals", s.confirmRemovals)
+            .putBoolean("hideDeckLists", s.hideDeckLists)
             .apply()
         _settings.value = s
     }
