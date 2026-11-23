@@ -1,0 +1,62 @@
+# ---- Gradle ----
+.gradle/
+build/
+**/build/
+.kotlin/
+# Keep the wrapper itself
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# ---- Android Studio / IntelliJ ----
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+captures/
+.navigation/
+.externalNativeBuild/
+.cxx/
+
+# ---- Local configuration (machine specific, may contain SDK paths or secrets) ----
+local.properties
+secrets.properties
+*.env
+.env*
+
+# ---- Signing keys – never commit ----
+*.jks
+*.keystore
+*.p12
+*.pem
+keystore.properties
+signing.properties
+
+# ---- Build outputs ----
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+output-metadata.json
+# Android Studio's "Generate Signed APK" output folder (not src/release!)
+/app/release/
+/app/debug/
+
+# ---- Logs, crash dumps, profiling ----
+*.log
+*.hprof
+*.trace
+lint-results*.html
+lint-results*.xml
+
+# ---- Google Services (contains project keys) ----
+google-services.json
+
+# ---- OS / editor clutter ----
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/

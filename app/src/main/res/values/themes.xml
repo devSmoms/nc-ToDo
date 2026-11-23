@@ -1,0 +1,12 @@
+<resources>
+    <style name="Theme.NcTodo" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Quick add window: transparent, drawn completely by Compose -->
+    <style name="Theme.NcTodo.Translucent" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
+</resources>

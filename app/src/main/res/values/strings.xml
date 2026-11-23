@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">NC Todo</string>
+    <string name="widget_description">Offene Aufgaben einer Liste – abhaken und neue anlegen</string>
+</resources>
