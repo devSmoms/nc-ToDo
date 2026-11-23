@@ -34,6 +34,10 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Gavel
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material.icons.outlined.ViewKanban
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
@@ -93,6 +97,19 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+private const val SOURCE_URL = "https://github.com/devSmoms/nc-ToDo"
+private const val LICENSE_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
+private const val APACHE_URL = "https://www.apache.org/licenses/LICENSE-2.0"
+private val LIBRARIES = listOf(
+    "AndroidX (Core, Activity, Lifecycle, DataStore)",
+    "Jetpack Compose & Material 3",
+    "Material Icons",
+    "Jetpack Glance (Widgets)",
+    "WorkManager",
+    "Kotlin & kotlinx.coroutines",
+    "OkHttp & Okio",
+)
+
 /** Same accent colors as the smart lists in the drawer. */
 private val SunColor = Color(0xFF9E7B00)
 private val StarColor = Color(0xFFC2185B)
@@ -111,6 +128,8 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
     val accent = MaterialTheme.colorScheme.primary
     var pickTime by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
+    var showLicense by remember { mutableStateOf(false) }
+    var showLibraries by remember { mutableStateOf(false) }
 
     // Turning on a notification type first asks for the Android 13+ permission.
     var pendingEnable by remember { mutableStateOf<((Settings) -> Settings)?>(null) }
@@ -360,11 +379,74 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
                         onClick = { confirmLogout = true },
                     )
                 }
-                Hint("NC Todo ${BuildConfig.VERSION_NAME}")
+            }
+
+            // ------------------------------------------------ about (GPL: show license and source)
+            item { SectionLabel("Über NC Todo") }
+            item {
+                SettingsCard {
+                    SettingRow(
+                        icon = Icons.Outlined.Info, tint = accent,
+                        title = "Version",
+                        trailing = { ValueText("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})") },
+                    )
+                    RowDivider()
+                    SettingRow(
+                        icon = Icons.Outlined.Code, tint = accent,
+                        title = "Quellcode auf GitHub",
+                        subtitle = SOURCE_URL.removePrefix("https://"),
+                        onClick = { openLink(context, SOURCE_URL) },
+                    )
+                    RowDivider()
+                    SettingRow(
+                        icon = Icons.Outlined.Gavel, tint = accent,
+                        title = "Lizenz: GNU GPL v3",
+                        subtitle = "Freie Software – Bedingungen anzeigen",
+                        onClick = { showLicense = true },
+                    )
+                    RowDivider()
+                    SettingRow(
+                        icon = Icons.Outlined.Widgets, tint = accent,
+                        title = "Verwendete Open-Source-Bibliotheken",
+                        onClick = { showLibraries = true },
+                    )
+                }
+                Hint("Copyright © 2026 devSmoms · Inoffizielle App, kein Produkt der Nextcloud GmbH.")
             }
         }
     }
 
+    if (showLicense) {
+        AlertDialog(
+            onDismissRequest = { showLicense = false },
+            title = { Text("Lizenz") },
+            text = {
+                Text(
+                    "NC Todo ist freie Software: Du kannst sie unter den Bedingungen der GNU General Public License, " +
+                        "Version 3 oder (nach deiner Wahl) jeder späteren Version, weitergeben und/oder verändern.\n\n" +
+                        "Die App wird OHNE JEDE GEWÄHRLEISTUNG bereitgestellt, sogar ohne die implizite Gewährleistung " +
+                        "der MARKTFÄHIGKEIT oder EIGNUNG FÜR EINEN BESTIMMTEN ZWECK.\n\n" +
+                        "Der vollständige Lizenztext liegt dem Quellcode bei (Datei LICENSE).",
+                )
+            },
+            confirmButton = { TextButton(onClick = { showLicense = false }) { Text("Schließen") } },
+            dismissButton = { TextButton(onClick = { openLink(context, LICENSE_URL) }) { Text("Volltext öffnen") } },
+        )
+    }
+    if (showLibraries) {
+        AlertDialog(
+            onDismissRequest = { showLibraries = false },
+            title = { Text("Open-Source-Bibliotheken") },
+            text = {
+                Text(
+                    LIBRARIES.joinToString("\n") { "• $it" } + "\n\nAlle stehen unter der Apache License 2.0.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = { TextButton(onClick = { showLibraries = false }) { Text("Schließen") } },
+            dismissButton = { TextButton(onClick = { openLink(context, APACHE_URL) }) { Text("Apache 2.0 öffnen") } },
+        )
+    }
     if (pickTime) {
         val tp = rememberTimePickerState(initialHour = s.dueTimeMinutes / 60, initialMinute = s.dueTimeMinutes % 60, is24Hour = true)
         AlertDialog(

@@ -29,6 +29,8 @@ Android-App für Nextcloud-Aufgaben (CalDAV/VTODO), bedient sich ähnlich wie Mi
 
 > Inoffizielle App – kein Produkt der Nextcloud GmbH und nicht mit Microsoft verbunden. „Nextcloud“ ist eine Marke der Nextcloud GmbH.
 
+> **Beta:** Diese App wurde mit Unterstützung von KI entwickelt. Sie wird ohne Gewährleistung bereitgestellt und befindet sich im Beta-Stadium – Fehler und Abstürze sind möglich. Rückmeldungen gerne über *Issues*.
+
 ## Download
 
 Fertige APKs gibt es unter **Releases** (rechts auf der GitHub-Seite). Installation: APK auf dem Handy öffnen und „Aus dieser Quelle installieren“ erlauben.
@@ -87,3 +89,15 @@ app/src/main/java/de/devsmoms/nctodo/
 
 Benötigte Repository-Secrets (*Settings → Secrets and variables → Actions*):
 `SIGNING_KEYSTORE_BASE64`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD`.
+
+## Lizenz
+
+Copyright (C) 2026 devSmoms
+
+Dieses Programm ist freie Software: Sie können es unter den Bedingungen der GNU General Public License, wie von der Free Software Foundation veröffentlicht, weitergeben und/oder modifizieren, entweder gemäß Version 3 der Lizenz oder (nach Ihrer Wahl) jeder späteren Version.
+
+Die Veröffentlichung dieses Programms erfolgt in der Hoffnung, dass es Ihnen von Nutzen sein wird, aber OHNE IRGENDEINE GARANTIE, sogar ohne die implizite Garantie der MARKTREIFE oder der VERWENDBARKEIT FÜR EINEN BESTIMMTEN ZWECK. Details finden Sie in der GNU General Public License.
+
+Den vollständigen Lizenztext finden Sie in der Datei [LICENSE](LICENSE).
+
+Verwendete Bibliotheken (AndroidX, Jetpack Compose, Glance, WorkManager, OkHttp, Material Icons) stehen unter der Apache License 2.0, die mit der GPL-3.0 vereinbar ist.
