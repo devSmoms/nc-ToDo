@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -526,31 +527,33 @@ private fun Drawer(
     onAccounts: () -> Unit,
 ) {
     fun count(kind: SmartList) = visibleTasks(state.copy(selection = Selection.Smart(kind))).count { !it.todo.completed }
+    val listState = rememberLazyListState()
+    // Account header (top) and trash (bottom) stay pinned; only the lists in between scroll.
     ModalDrawerSheet {
-        LazyColumn(Modifier.fillMaxSize()) {
-            item {
-                Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // Avatar and name open the account switcher.
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(onClick = onAccounts).padding(8.dp),
-                    ) {
-                        AccountAvatar(state.credentials?.displayName.orEmpty(), state.activeAccount)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(state.credentials?.displayName.orEmpty(), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                state.credentials?.serverUrl?.let(::serverLabel).orEmpty() +
-                                    if (state.accounts.size > 1) " · ${state.accounts.size} Konten" else "",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Icon(Icons.Outlined.UnfoldMore, "Konto wechseln", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen") }
+        Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Avatar and name open the account switcher.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(onClick = onAccounts).padding(8.dp),
+            ) {
+                AccountAvatar(state.credentials?.displayName.orEmpty(), state.activeAccount)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(state.credentials?.displayName.orEmpty(), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        state.credentials?.serverUrl?.let(::serverLabel).orEmpty() +
+                            if (state.accounts.size > 1) " · ${state.accounts.size} Konten" else "",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
                 }
+                Icon(Icons.Outlined.UnfoldMore, "Konto wechseln", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen") }
+        }
+        // Separator lines only appear while content is scrolled underneath them.
+        EdgeDivider(visible = listState.canScrollBackward)
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
             val smart = listOf(
                 Triple(SmartList.MY_DAY, Icons.Outlined.WbSunny, Color(0xFF9E7B00)),
                 Triple(SmartList.IMPORTANT, Icons.Outlined.StarBorder, Color(0xFFC2185B)),
@@ -584,17 +587,26 @@ private fun Drawer(
                     selected = false, onClick = onNewList,
                     modifier = Modifier.padding(horizontal = 12.dp),
                 )
-                HorizontalDivider(Modifier.padding(vertical = 8.dp, horizontal = 16.dp))
-                NavigationDrawerItem(
-                    label = { Text("Papierkorb") },
-                    icon = { Icon(Icons.Outlined.Delete, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    selected = false, onClick = onTrash,
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(8.dp))
             }
         }
+        EdgeDivider(visible = true)
+        NavigationDrawerItem(
+            label = { Text("Papierkorb") },
+            icon = { Icon(Icons.Outlined.Delete, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+            selected = false, onClick = onTrash,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        )
     }
+}
+
+/** Thin line between a pinned area and the scrolling list; invisible keeps the layout from jumping. */
+@Composable
+private fun EdgeDivider(visible: Boolean) {
+    HorizontalDivider(
+        Modifier.padding(horizontal = 16.dp),
+        color = if (visible) MaterialTheme.colorScheme.outlineVariant else Color.Transparent,
+    )
 }
 
 @Composable
