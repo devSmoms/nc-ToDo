@@ -10,6 +10,8 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
@@ -201,7 +203,12 @@ class Sidebar(private val state: AppState, private val frame: MainFrame) : JPane
         val selected = state.search.isBlank() && !state.showSettings && state.selection == sel
         val color = parseColor(list.color)
         val open = tasksFor(sel, data, state.hidden).count { !it.todo.completed }
-        return NavRow(ListIcons.iconOf(list.name) ?: ListIcons.DEFAULT, { color }, list.label(), open, selected, indent, onClick = { select(sel) }) {
+        val status = when {
+            !list.isOwner && !list.canWrite -> Icons.Outlined.Lock to "Geteilt, nur lesen"
+            !list.isOwner || list.shares.isNotEmpty() -> Icons.Outlined.People to "Geteilte Liste"
+            else -> null
+        }
+        return NavRow(ListIcons.iconOf(list.name) ?: ListIcons.DEFAULT, { color }, list.label(), open, selected, indent, status, onClick = { select(sel) }) {
             popupMenu(
                 (if (list.group == null) "In Gruppe verschieben …" else "Gruppe ändern …") to {
                     val (changed, group) = groupPicker(frame, list.label(), list.group, groups)
@@ -292,6 +299,8 @@ class NavRow(
     count: Int,
     private val selected: Boolean,
     indent: Int,
+    /** Small symbol after the name (shared list), with tooltip. */
+    status: Pair<ImageVector, String>? = null,
     onClick: () -> Unit,
     popup: (() -> JPopupMenu?)? = null,
 ) : JPanel(BorderLayout()) {
@@ -311,6 +320,10 @@ class NavRow(
         val title = uiLabel(text, 14f)
         title.minimumSize = Dimension(0, 0)
         inner.add(title)
+        status?.let { (icon, tip) ->
+            inner.add(Box.createHorizontalStrut(6))
+            inner.add(JLabel(VectorIcon(icon, 15) { Theme.subtext }).apply { toolTipText = tip })
+        }
         inner.add(Box.createHorizontalGlue())
         if (count > 0) inner.add(uiLabel(count.toString(), 12f) { Theme.subtext })
         add(inner)

@@ -856,11 +856,10 @@ private fun DrawerListEntry(
         !list.isOwner || list.shares.isNotEmpty() -> Icons.Outlined.People
         else -> null
     }
-    // Own icon if set; otherwise the sharing state is the icon, as before.
-    val custom = ListIcons.iconOf(list.name)
+    // In front: the list's own icon or the normal list icon; the sharing state always follows the title.
     DrawerEntry(
-        ListIcons.label(list.name), custom ?: status ?: ListIcons.DEFAULT, parseColor(list.color), openCount(state, list),
-        state.selection == Selection.OfList(list.url), statusIcon = if (custom != null) status else null,
+        ListIcons.label(list.name), ListIcons.iconOf(list.name) ?: ListIcons.DEFAULT, parseColor(list.color), openCount(state, list),
+        state.selection == Selection.OfList(list.url), statusIcon = status,
         interactionSource = interactionSource, modifier = modifier,
     ) {
         onSelect(Selection.OfList(list.url))
