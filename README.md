@@ -92,10 +92,16 @@ Unter **[Releases](../../releases)** gibt es neben der APK auch einen Windows-In
 
 - Anmeldung im Browser wie auf Android, Offline-Speicher verschlüsselt
 - Zugangsdaten im System-Schlüsselbund: Windows-Datenschutz-API (DPAPI), unter Linux der Schlüsselbund des Desktops über `secret-tool` – dafür muss das Paket **`libsecret-tools`** installiert sein (`sudo apt install libsecret-tools`)
-- Tastenkürzel: **Strg+N** neue Aufgabe, **Strg+F** Suche, **Strg+R** synchronisieren, **Entf** ausgewählte Aufgabe löschen; Rechtsklick auf eine Aufgabe für weitere Aktionen
+- Listengruppen wie auf Android: Ordner-Knopf neben „Neue Liste“ erstellt eine Gruppe, **Rechtsklick auf eine Liste → In Gruppe verschieben**, über ⋮ an der Gruppe umbenennen, auflösen oder direkt eine neue Liste darin anlegen
+- Links in Aufgaben als Karten mit Titel und Vorschaubild; Klick öffnet den Browser, „Link hinzufügen“ in der Detailansicht
+- Kleine Symbole in der Aufgabenliste zeigen, ob eine Aufgabe einen Link, eine Notiz oder eine Wiederholung hat
+- Einstellungen (Zahnrad oben links): Hell/Dunkel/System, eigener Anzeigename, Deck-Listen ausblenden, Link-Vorschau, Nachfragen vor dem Entfernen, Sync-Intervall, Lizenzen
+- Tastenkürzel: **Strg+N** neue Aufgabe, **Strg+F** Suche (Esc leert sie), **Strg+R** synchronisieren, **Entf** ausgewählte Aufgabe löschen; Rechtsklick auf eine Aufgabe für weitere Aktionen
 - Windows zeigt beim ersten Start eventuell „Unbekannter Herausgeber“ (SmartScreen), weil der Installer nicht kostenpflichtig signiert ist: *Weitere Informationen → Trotzdem ausführen*
 
-Noch nicht in der Desktop-App: mehrere Konten, Teilen, Gruppen bearbeiten, Wiederholungen, Links, Benachrichtigungen und Infobereich.
+<img src="docs/screenshots/desktop-einstellungen.png" width="720" alt="Einstellungen der Desktop-App">
+
+Noch nicht in der Desktop-App: mehrere Konten, Teilen, Listen per Maus ziehen, Wiederholungen bearbeiten, Benachrichtigungen und Infobereich.
 
 ## Sicherheit
 

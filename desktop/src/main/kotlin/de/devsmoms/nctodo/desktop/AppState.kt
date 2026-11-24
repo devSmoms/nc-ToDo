@@ -8,6 +8,7 @@ import de.devsmoms.nctodo.data.Credentials
 import de.devsmoms.nctodo.data.LoginFlow
 import de.devsmoms.nctodo.data.Remote
 import de.devsmoms.nctodo.data.TaskItem
+import de.devsmoms.nctodo.data.TaskList
 import de.devsmoms.nctodo.dav.AuthException
 import de.devsmoms.nctodo.dav.DavException
 import de.devsmoms.nctodo.ical.TodoMapper
@@ -38,6 +39,19 @@ data class UiMessage(val text: String, val undo: (() -> Unit)? = null, val onTim
 class AppState(private val scope: CoroutineScope) {
     private val secrets: SecretStore = SecretStore.forThisOs()
     private val credentialStore = DesktopCredentialStore(secrets)
+    private val settingsStore = DesktopSettingsStore(DesktopPaths.dataDir.resolve("settings.properties"))
+
+    var settings by mutableStateOf(settingsStore.load()); private set
+
+    fun updateSettings(change: (DesktopSettings) -> DesktopSettings) {
+        val old = settings
+        settings = change(old)
+        runCatching { settingsStore.save(settings) }
+        if (old.syncIntervalSec != settings.syncIntervalSec) restartTicker()
+    }
+
+    /** Settings page shown instead of the task list. */
+    var showSettings by mutableStateOf(false)
 
     var ready by mutableStateOf(false); private set
     var credentials by mutableStateOf<Credentials?>(null); private set
@@ -46,7 +60,6 @@ class AppState(private val scope: CoroutineScope) {
     var selection by mutableStateOf<Selection>(Selection.Smart(SmartList.MY_DAY))
     var selectedTask by mutableStateOf<String?>(null)
     var search by mutableStateOf("")
-    var collapsedGroups by mutableStateOf(setOf<String>())
     /** Tasks deleted with "undo" still possible. */
     var hidden by mutableStateOf(setOf<String>()); private set
 
@@ -81,15 +94,25 @@ class AppState(private val scope: CoroutineScope) {
         repo.onLocalChange = { scope.launch { safeSync(pushOnly = true) } }
         repository = repo
         credentials = c
+        restartTicker()
+    }
+
+    /** Syncs now and then in the configured interval while the app is open. */
+    private fun restartTicker() {
+        if (repository == null) return
         ticker?.cancel()
-        // Sync now and then every minute while the app is open.
         ticker = scope.launch {
             while (isActive) {
                 safeSync()
-                delay(SYNC_INTERVAL_MS)
+                val interval = settings.syncIntervalSec
+                if (interval <= 0) break
+                delay(interval * 1000L)
             }
         }
     }
+
+    /** Name shown for the account: own name from the settings, else the one from Nextcloud. */
+    val displayName: String get() = settings.accountName.trim().ifEmpty { credentials?.displayName.orEmpty() }
 
     fun syncNow() {
         scope.launch { safeSync() }
@@ -172,10 +195,16 @@ class AppState(private val scope: CoroutineScope) {
             ticker?.cancel()
             remote = null
             repository?.clear()
-            withContext(Dispatchers.IO) { runCatching { credentialStore.clear() } }
+            withContext(Dispatchers.IO) {
+                runCatching { credentialStore.clear() }
+                runCatching { settingsStore.delete() }
+            }
+            LinkPreviews.clear()
+            settings = DesktopSettings()
             repository = null
             credentials = null
             selectedTask = null
+            showSettings = false
             hidden = emptySet()
             selection = Selection.Smart(SmartList.MY_DAY)
         }
@@ -191,7 +220,7 @@ class AppState(private val scope: CoroutineScope) {
         val sel = selection
         val target = when (sel) {
             is Selection.OfList -> data.list(sel.url)
-            is Selection.Smart -> data.forDisplay().lists.defaultTarget()
+            is Selection.Smart -> data.forDisplay(settings.hideDeckLists).lists.defaultTarget()
         } ?: return message("Keine Liste zum Hinzufügen vorhanden")
         val smart = (sel as? Selection.Smart)?.kind
         launchSafe {
@@ -244,17 +273,73 @@ class AppState(private val scope: CoroutineScope) {
         )
     }
 
-    fun createList(name: String, color: String) {
+    /** Creates a list (optionally directly inside [group]) and opens it. */
+    fun createList(name: String, color: String, group: String? = null) {
         val repo = repository ?: return
         if (name.isBlank()) return
         launchSafe {
             val url = repo.createList(name.trim(), color)
+            showSettings = false
+            search = ""
             selection = Selection.OfList(url)
+            if (group != null) {
+                updateSettings { it.copy(emptyGroups = it.emptyGroups - group) }
+                repo.data.value.list(url)?.let { repo.setListGroup(listOf(it), group) }
+            }
         }
     }
 
-    fun toggleGroup(name: String) {
-        collapsedGroups = if (name in collapsedGroups) collapsedGroups - name else collapsedGroups + name
+    fun addLink(item: TaskItem, url: String) {
+        val link = url.trim()
+        if (!TodoMapper.isWebLink(link)) return message("Bitte eine Adresse mit https:// eingeben")
+        if (link in item.todo.links) return
+        launchSafe { repository?.updateTask(item.url, TaskFields.links(item.todo.links + link)) }
+    }
+
+    fun removeLink(item: TaskItem, url: String) =
+        launchSafe { repository?.updateTask(item.url, TaskFields.links(item.todo.links - url)) }
+
+    // ---------------------------------------------------------------- list groups
+
+    fun toggleGroup(name: String) = updateSettings { s ->
+        s.copy(collapsedGroups = if (name in s.collapsedGroups) s.collapsedGroups - name else s.collapsedGroups + name)
+    }
+
+    /** Empty groups exist only here until the first list is moved into them. */
+    fun createGroup(name: String) {
+        val g = name.trim().take(CalDavRepository.MAX_GROUP_LENGTH)
+        if (g.isEmpty()) return
+        val lists = repository?.data?.value?.lists.orEmpty()
+        if (lists.any { it.group == g } || g in settings.emptyGroups) return message("Die Gruppe „$g“ gibt es schon")
+        updateSettings { it.copy(emptyGroups = it.emptyGroups + g, collapsedGroups = it.collapsedGroups - g) }
+    }
+
+    fun moveListToGroup(list: TaskList, group: String?) {
+        val g = group?.trim()?.takeIf { it.isNotEmpty() }
+        if (g != null) updateSettings { it.copy(emptyGroups = it.emptyGroups - g) }
+        launchSafe {
+            repository?.setListGroup(listOf(list), g)
+            message(if (g == null) "Aus der Gruppe entfernt" else "In „$g“ verschoben")
+        }
+    }
+
+    fun renameGroup(old: String, new: String) {
+        val target = new.trim()
+        if (target.isEmpty() || target == old) return
+        updateSettings { s ->
+            s.copy(
+                collapsedGroups = s.collapsedGroups.map { if (it == old) target else it }.toSet(),
+                emptyGroups = if (old in s.emptyGroups) s.emptyGroups - old + target else s.emptyGroups,
+            )
+        }
+        val members = repository?.data?.value?.lists.orEmpty().filter { it.group == old }
+        if (members.isNotEmpty()) launchSafe { repository?.setListGroup(members, target) }
+    }
+
+    fun dissolveGroup(name: String) {
+        updateSettings { s -> s.copy(collapsedGroups = s.collapsedGroups - name, emptyGroups = s.emptyGroups - name) }
+        val members = repository?.data?.value?.lists.orEmpty().filter { it.group == name }
+        if (members.isNotEmpty()) launchSafe { repository?.setListGroup(members, null) }
     }
 
     // ---------------------------------------------------------------- helpers
@@ -288,8 +373,6 @@ class AppState(private val scope: CoroutineScope) {
     }
 
     companion object {
-        private const val SYNC_INTERVAL_MS = 60_000L
-
         fun openInBrowser(url: String) {
             runCatching {
                 if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {

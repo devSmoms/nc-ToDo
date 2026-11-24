@@ -39,6 +39,9 @@ fun main() = application {
     }
     val windowState = rememberWindowState(size = DpSize(1200.dp, 800.dp))
     val shortcuts = remember { Shortcuts() }
+    // Created before the theme so the theme can follow the settings.
+    val scope = rememberCoroutineScope()
+    val state = remember { AppState(scope) }
     Window(
         onCloseRequest = ::exitApplication,
         title = "NC Todo",
@@ -55,10 +58,8 @@ fun main() = application {
         },
     ) {
         window.minimumSize = java.awt.Dimension(720, 480)
-        NcTodoTheme {
+        NcTodoTheme(state.settings.theme) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                val scope = rememberCoroutineScope()
-                val state = remember { AppState(scope) }
                 when {
                     !state.ready -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     state.credentials == null -> LoginView(state)
@@ -77,8 +78,12 @@ class Shortcuts {
 }
 
 @Composable
-fun NcTodoTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun NcTodoTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
+    val dark = when (mode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
     MaterialTheme(
         colorScheme = if (dark) darkColorScheme(primary = Color(0xFF8AB4F8)) else lightColorScheme(primary = AccentBlue),
         content = content,

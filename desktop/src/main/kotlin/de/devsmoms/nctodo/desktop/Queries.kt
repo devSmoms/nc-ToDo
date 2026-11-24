@@ -24,8 +24,9 @@ fun TaskList.label(): String = ListIcon.split(name).second.ifBlank { name }
 
 fun TaskList.isDeckList(): Boolean = label().trimStart().startsWith("Deck:", ignoreCase = true)
 
-/** Deck board lists ("Deck: …") are hidden, like the Android default. */
-fun LocalData.forDisplay(): LocalData {
+/** With [hideDeck], Deck board lists ("Deck: …") and their tasks are left out everywhere. */
+fun LocalData.forDisplay(hideDeck: Boolean = true): LocalData {
+    if (!hideDeck) return this
     val hidden = lists.filter { it.isDeckList() }.map { it.url }.toSet()
     if (hidden.isEmpty()) return this
     return copy(lists = lists.filterNot { it.url in hidden }, tasks = tasks.filterKeys { it !in hidden })
@@ -76,8 +77,13 @@ fun List<TaskList>.defaultTarget(): TaskList? {
         ?: writable.firstOrNull { it.isOwner } ?: writable.firstOrNull()
 }
 
-/** Menu order and groups: ungrouped lists first, then groups where their first list is. */
-fun groupedLists(lists: List<TaskList>): Pair<List<TaskList>, List<Pair<String, List<TaskList>>>> {
+/**
+ * Menu order and groups: ungrouped lists first, then groups where their first list is;
+ * [emptyGroups] (created here, no list yet) at the end.
+ */
+fun groupedLists(lists: List<TaskList>, emptyGroups: Set<String> = emptySet()): Pair<List<TaskList>, List<Pair<String, List<TaskList>>>> {
     val sorted = lists.sortedWith(compareBy<TaskList>({ it.order ?: Int.MAX_VALUE }, { it.label().lowercase() }))
-    return sorted.filter { it.group == null } to sorted.filter { it.group != null }.groupBy { it.group!! }.toList()
+    val groups = sorted.filter { it.group != null }.groupBy { it.group!! }.toList()
+    val empty = emptyGroups.filter { g -> groups.none { it.first == g } }.sortedBy { it.lowercase() }.map { it to emptyList<TaskList>() }
+    return sorted.filter { it.group == null } to (groups + empty)
 }

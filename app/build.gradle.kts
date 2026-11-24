@@ -11,7 +11,7 @@ android {
         applicationId = "de.devsmoms.nctodo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 22
+        versionCode = 23
         versionName = providers.gradleProperty("nctodo.versionName").get()
     }
 

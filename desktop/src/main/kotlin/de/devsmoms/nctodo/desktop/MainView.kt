@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -27,7 +30,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.automirrored.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
+import androidx.compose.material.icons.outlined.FolderOff
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
@@ -83,6 +94,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -129,7 +141,8 @@ fun MainView(state: AppState, shortcuts: Shortcuts) {
     val repo = state.repository ?: return
     val raw by repo.data.collectAsState()
     val status by repo.status.collectAsState()
-    val data = remember(raw) { raw.forDisplay() }
+    val hideDeck = state.settings.hideDeckLists
+    val data = remember(raw, hideDeck) { raw.forDisplay(hideDeck) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val addFocus = remember { FocusRequester() }
@@ -157,11 +170,15 @@ fun MainView(state: AppState, shortcuts: Shortcuts) {
         Row(Modifier.fillMaxSize().padding(padding)) {
             Sidebar(state, data, searchFocus, Modifier.width(290.dp).fillMaxHeight())
             VerticalDivider()
-            TaskPane(state, data, status.offline, status.running, addFocus, Modifier.weight(1f).fillMaxHeight())
-            val selected = state.selectedTask?.let { data.task(it) }
-            if (selected != null) {
-                VerticalDivider()
-                DetailPane(state, selected, data, Modifier.width(380.dp).fillMaxHeight())
+            if (state.showSettings) {
+                SettingsView(state, Modifier.weight(1f).fillMaxHeight())
+            } else {
+                TaskPane(state, data, status.offline, status.running, addFocus, Modifier.weight(1f).fillMaxHeight())
+                val selected = state.selectedTask?.let { data.task(it) }
+                if (selected != null) {
+                    VerticalDivider()
+                    DetailPane(state, selected, data, Modifier.width(380.dp).fillMaxHeight())
+                }
             }
         }
     }
@@ -172,103 +189,240 @@ fun MainView(state: AppState, shortcuts: Shortcuts) {
 @Composable
 private fun Sidebar(state: AppState, data: LocalData, searchFocus: FocusRequester, modifier: Modifier) {
     var accountMenu by remember { mutableStateOf(false) }
-    var newList by remember { mutableStateOf(false) }
+    var newList by remember { mutableStateOf<String?>(null) } // group the new list goes into ("" = none)
+    var groupDialog by remember { mutableStateOf<GroupDialog?>(null) }
+    var moveList by remember { mutableStateOf<TaskList?>(null) }
+    var dissolve by remember { mutableStateOf<String?>(null) }
     val creds = state.credentials ?: return
+    val name = state.displayName
     fun count(kind: SmartList) = tasksFor(Selection.Smart(kind), data, state.hidden).count { !it.todo.completed }
+    val (ungrouped, groups) = groupedLists(data.lists, state.settings.emptyGroups)
 
     Column(modifier.background(MaterialTheme.colorScheme.surfaceContainerLow)) {
-        // Account (pinned at the top)
-        Box(Modifier.padding(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { accountMenu = true }.padding(8.dp),
-            ) {
-                Box(
-                    Modifier.size(40.dp).clip(CircleShape).background(AccentBlue.copy(alpha = 0.18f)),
-                    contentAlignment = Alignment.Center,
-                ) { Text(creds.displayName.take(1).uppercase(), color = AccentBlue, fontWeight = FontWeight.Bold) }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(creds.displayName, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        creds.serverUrl.removePrefix("https://").trimEnd('/'),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+        // Account and settings (pinned at the top)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 12.dp, bottom = 8.dp)) {
+            Box(Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { accountMenu = true }.padding(8.dp),
+                ) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).background(AccentBlue.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(name.take(1).uppercase(), color = AccentBlue, fontWeight = FontWeight.Bold) }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            creds.serverUrl.removePrefix("https://").trimEnd('/'),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                DropdownMenu(expanded = accountMenu, onDismissRequest = { accountMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Jetzt synchronisieren (Strg+R)") }, leadingIcon = { Icon(Icons.Outlined.Sync, null) },
+                        onClick = { accountMenu = false; state.syncNow() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Einstellungen") }, leadingIcon = { Icon(Icons.Outlined.Settings, null) },
+                        onClick = { accountMenu = false; state.showSettings = true },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Abmelden") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },
+                        onClick = { accountMenu = false; state.logout() },
                     )
                 }
-                Icon(Icons.Outlined.UnfoldMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            DropdownMenu(expanded = accountMenu, onDismissRequest = { accountMenu = false }) {
-                DropdownMenuItem(
-                    text = { Text("Jetzt synchronisieren (Strg+R)") }, leadingIcon = { Icon(Icons.Outlined.Sync, null) },
-                    onClick = { accountMenu = false; state.syncNow() },
-                )
-                DropdownMenuItem(
-                    text = { Text("Abmelden") }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },
-                    onClick = { accountMenu = false; state.logout() },
-                )
+            IconButton(onClick = { state.showSettings = !state.showSettings }) {
+                Icon(Icons.Outlined.Settings, "Einstellungen", tint = if (state.showSettings) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        // Search
-        OutlinedTextField(
-            value = state.search, onValueChange = { state.search = it },
-            placeholder = { Text("Suchen (Strg+F)") }, singleLine = true,
-            leadingIcon = { Icon(Icons.Outlined.Search, null) },
-            trailingIcon = { if (state.search.isNotEmpty()) IconButton(onClick = { state.search = "" }) { Icon(Icons.Outlined.Close, "Suche leeren") } },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).focusRequester(searchFocus),
-        )
+        SearchBar(state, searchFocus)
         Spacer(Modifier.height(8.dp))
         // Smart lists, lists and groups (scrolling)
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             items(SmartList.entries) { kind ->
-                MenuEntry(kind.title, kind.icon(), kind.color(), count(kind), state.selection == Selection.Smart(kind)) {
+                MenuEntry(kind.title, kind.icon(), kind.color(), count(kind), !state.showSettings && state.search.isBlank() && state.selection == Selection.Smart(kind)) {
                     state.search = ""
+                    state.showSettings = false
                     state.selection = Selection.Smart(kind)
                 }
             }
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp, horizontal = 16.dp)) }
-            val (ungrouped, groups) = groupedLists(data.lists)
-            items(ungrouped, key = { it.url }) { ListEntry(state, data, it, indent = false) }
-            groups.forEach { (name, lists) ->
-                val collapsed = name in state.collapsedGroups
-                item(key = "group:$name") {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(24.dp))
-                            .clickable { state.toggleGroup(name) }.height(44.dp).padding(horizontal = 16.dp),
-                    ) {
-                        Icon(if (collapsed) Icons.Outlined.Folder else Icons.Outlined.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(12.dp))
-                        Text(name, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Icon(
-                            if (collapsed) Icons.AutoMirrored.Outlined.KeyboardArrowRight else Icons.Outlined.ExpandMore, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+            items(ungrouped, key = { it.url }) { ListEntry(state, data, it, indent = false, onMove = { moveList = it }) }
+            groups.forEach { (group, lists) ->
+                val collapsed = group in state.settings.collapsedGroups
+                item(key = "group:$group") {
+                    GroupHeader(
+                        name = group, collapsed = collapsed, empty = lists.isEmpty(),
+                        onToggle = { state.toggleGroup(group) },
+                        onNewList = { newList = group },
+                        onRename = { groupDialog = GroupDialog(group) },
+                        onDissolve = { dissolve = group },
+                    )
                 }
-                if (!collapsed) items(lists, key = { it.url }) { ListEntry(state, data, it, indent = true) }
+                if (!collapsed) items(lists, key = { it.url }) { ListEntry(state, data, it, indent = true, onMove = { moveList = it }) }
             }
         }
         HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-        NavigationDrawerItem(
-            label = { Text("Neue Liste") }, icon = { Icon(Icons.Outlined.Add, null) },
-            selected = false, onClick = { newList = true }, modifier = Modifier.padding(12.dp),
-        )
+        // New list + new group (pinned at the bottom)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)) {
+            NavigationDrawerItem(
+                label = { Text("Neue Liste") }, icon = { Icon(Icons.Outlined.Add, null) },
+                selected = false, onClick = { newList = "" }, modifier = Modifier.weight(1f),
+            )
+            TooltipIconButton("Neue Gruppe", Icons.Outlined.CreateNewFolder) { groupDialog = GroupDialog(null) }
+        }
     }
-    if (newList) NewListDialog(onDismiss = { newList = false }) { name, color ->
-        newList = false
-        state.createList(name, color)
+
+    newList?.let { group ->
+        NewListDialog(group.ifEmpty { null }, onDismiss = { newList = null }) { listName, color ->
+            newList = null
+            state.createList(listName, color, group.ifEmpty { null })
+        }
+    }
+    groupDialog?.let { d ->
+        NameDialog(
+            title = if (d.oldName == null) "Neue Gruppe" else "Gruppe umbenennen",
+            initial = d.oldName.orEmpty(),
+            confirm = if (d.oldName == null) "Erstellen" else "Umbenennen",
+            hint = if (d.oldName == null) "Danach Listen per Rechtsklick → „In Gruppe verschieben“ hinzufügen." else null,
+            onDismiss = { groupDialog = null },
+        ) { newName ->
+            groupDialog = null
+            if (d.oldName == null) state.createGroup(newName) else state.renameGroup(d.oldName, newName)
+        }
+    }
+    moveList?.let { list ->
+        GroupPickerDialog(
+            listName = list.label(),
+            current = list.group,
+            groups = groups.map { it.first },
+            onDismiss = { moveList = null },
+        ) { group ->
+            moveList = null
+            state.moveListToGroup(list, group)
+        }
+    }
+    dissolve?.let { group ->
+        ConfirmDialog(
+            title = "Gruppe „$group“ auflösen?",
+            text = "Die Listen bleiben erhalten und stehen danach ohne Gruppe im Menü.",
+            confirm = "Auflösen",
+            onDismiss = { dissolve = null },
+        ) {
+            dissolve = null
+            state.dissolveGroup(group)
+        }
+    }
+}
+
+private data class GroupDialog(val oldName: String?)
+
+/** Rounded, filled search field like in Microsoft To Do. */
+@Composable
+private fun SearchBar(state: AppState, focus: FocusRequester) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(38.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 4.dp)) {
+            Icon(Icons.Outlined.Search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(10.dp))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (state.search.isEmpty()) {
+                    Text("Suchen", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                BasicTextField(
+                    value = state.search,
+                    onValueChange = { state.search = it.replace("\n", ""); if (it.isNotBlank()) state.showSettings = false },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { e ->
+                        if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { state.search = ""; true } else false
+                    },
+                )
+            }
+            if (state.search.isNotEmpty()) {
+                IconButton(onClick = { state.search = "" }, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Outlined.Close, "Suche leeren", Modifier.size(16.dp))
+                }
+            } else {
+                Text("Strg+F", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 8.dp))
+            }
+        }
     }
 }
 
 @Composable
-private fun ListEntry(state: AppState, data: LocalData, list: TaskList, indent: Boolean) {
+private fun GroupHeader(
+    name: String,
+    collapsed: Boolean,
+    empty: Boolean,
+    onToggle: () -> Unit,
+    onNewList: () -> Unit,
+    onRename: () -> Unit,
+    onDissolve: () -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
+    ContextMenuArea(items = {
+        listOf(
+            ContextMenuItem("Neue Liste in der Gruppe", onNewList),
+            ContextMenuItem("Gruppe umbenennen", onRename),
+            ContextMenuItem("Gruppe auflösen", onDissolve),
+        )
+    }) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(24.dp))
+                .clickable(onClick = onToggle).heightIn(min = 44.dp).padding(start = 16.dp, end = 4.dp),
+        ) {
+            Icon(if (collapsed) Icons.Outlined.Folder else Icons.Outlined.FolderOpen, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (empty) {
+                    Text(
+                        "Rechtsklick auf eine Liste → In Gruppe verschieben",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Box {
+                IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Outlined.MoreVert, "Gruppe bearbeiten", Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Neue Liste in der Gruppe") }, leadingIcon = { Icon(Icons.Outlined.Add, null) }, onClick = { menu = false; onNewList() })
+                    DropdownMenuItem(text = { Text("Gruppe umbenennen") }, leadingIcon = { Icon(Icons.Outlined.DriveFileRenameOutline, null) }, onClick = { menu = false; onRename() })
+                    DropdownMenuItem(text = { Text("Gruppe auflösen") }, leadingIcon = { Icon(Icons.Outlined.FolderOff, null) }, onClick = { menu = false; onDissolve() })
+                }
+            }
+            Icon(
+                if (collapsed) Icons.AutoMirrored.Outlined.KeyboardArrowRight else Icons.Outlined.ExpandMore, null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ListEntry(state: AppState, data: LocalData, list: TaskList, indent: Boolean, onMove: (TaskList) -> Unit) {
     val open = tasksFor(Selection.OfList(list.url), data, state.hidden).count { !it.todo.completed }
-    val selected = state.selection == Selection.OfList(list.url)
-    Box(Modifier.padding(start = if (indent) 24.dp else 0.dp)) {
-        MenuEntry(list.label(), Icons.AutoMirrored.Outlined.List, parseColor(list.color), open, selected) {
-            state.search = ""
-            state.selection = Selection.OfList(list.url)
+    val selected = !state.showSettings && state.search.isBlank() && state.selection == Selection.OfList(list.url)
+    ContextMenuArea(items = {
+        listOf(ContextMenuItem(if (list.group == null) "In Gruppe verschieben …" else "Gruppe ändern …") { onMove(list) })
+    }) {
+        Box(Modifier.padding(start = if (indent) 24.dp else 0.dp)) {
+            MenuEntry(list.label(), Icons.AutoMirrored.Outlined.List, parseColor(list.color), open, selected) {
+                state.search = ""
+                state.showSettings = false
+                state.selection = Selection.OfList(list.url)
+            }
         }
     }
 }
@@ -281,35 +435,6 @@ private fun MenuEntry(title: String, icon: ImageVector, tint: Color, count: Int,
         badge = { if (count > 0) Text(count.toString(), style = MaterialTheme.typography.labelMedium) },
         selected = selected, onClick = onClick,
         modifier = Modifier.padding(horizontal = 12.dp).height(44.dp),
-    )
-}
-
-@Composable
-private fun NewListDialog(onDismiss: () -> Unit, onCreate: (String, String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var color by remember { mutableStateOf(CalDavRepository.COLORS.first()) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Neue Liste") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedTextField(
-                    value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true,
-                    keyboardActions = KeyboardActions(onDone = { if (name.isNotBlank()) onCreate(name, color) }),
-                    keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CalDavRepository.COLORS.forEach { c ->
-                        Box(
-                            Modifier.size(28.dp).clip(CircleShape).background(parseColor(c)).clickable { color = c },
-                            contentAlignment = Alignment.Center,
-                        ) { if (c == color) Icon(Icons.Outlined.CheckCircle, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = { onCreate(name, color) }, enabled = name.isNotBlank()) { Text("Erstellen") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
     )
 }
 
@@ -379,6 +504,12 @@ private fun TaskRow(state: AppState, data: LocalData, item: TaskItem, accent: Co
         if (steps.isNotEmpty()) add("${steps.count { it.todo.completed }} von ${steps.size}")
         t.due?.let { add(formatDate(it)) }
     }
+    // Small symbols like in Microsoft To Do: repeats, has a link, has a note.
+    val badges = buildList {
+        if (t.recurring) add(Icons.Outlined.Repeat to "Wiederholt sich")
+        if (t.links.isNotEmpty()) add(Icons.Outlined.Link to (if (t.links.size == 1) "1 Link" else "${t.links.size} Links"))
+        if (t.description.isNotBlank()) add(Icons.AutoMirrored.Outlined.StickyNote2 to "Notiz")
+    }
     ContextMenuArea(items = {
         if (!writable) emptyList() else listOf(
             ContextMenuItem(if (t.completed) "Als nicht erledigt markieren" else "Als erledigt markieren") { state.toggleDone(item) },
@@ -416,12 +547,21 @@ private fun TaskRow(state: AppState, data: LocalData, item: TaskItem, accent: Co
                         textDecoration = if (t.completed) TextDecoration.LineThrough else null,
                         color = if (t.completed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                     )
-                    if (meta.isNotEmpty()) {
-                        val overdue = t.due?.isBefore(LocalDate.now()) == true && !t.completed
-                        Text(
-                            meta.joinToString(" · "), style = MaterialTheme.typography.bodySmall,
-                            color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    if (meta.isNotEmpty() || badges.isNotEmpty()) {
+                        val overdue = t.due?.let { it.isBefore(LocalDate.now()) } == true && !t.completed
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (meta.isNotEmpty()) {
+                                Text(
+                                    meta.joinToString(" · "), style = MaterialTheme.typography.bodySmall,
+                                    color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                                )
+                            }
+                            badges.forEachIndexed { i, (icon, label) ->
+                                if (i == 0 && meta.isNotEmpty()) Text("·", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(icon, label, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
                 }
                 IconButton(onClick = { state.toggleStar(item) }, enabled = writable) {
@@ -479,7 +619,10 @@ private fun DetailPane(state: AppState, item: TaskItem, data: LocalData, modifie
     LaunchedEffect(item.url, title) { delay(600); state.rename(item, title) }
     LaunchedEffect(item.url, notes) { delay(800); state.setNotes(item, notes) }
 
-    Column(modifier.background(MaterialTheme.colorScheme.surfaceContainerLow).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(
+        modifier.background(MaterialTheme.colorScheme.surfaceContainerLow).verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(list?.label().orEmpty(), color = accent, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             IconButton(onClick = { state.selectedTask = null }) { Icon(Icons.Outlined.Close, "Schließen") }
@@ -556,13 +699,14 @@ private fun DetailPane(state: AppState, item: TaskItem, data: LocalData, modifie
                 ) { pickDate = true }
             }
         }
+        // Links
+        LinksSection(state, item, writable, accent)
         // Notes
         OutlinedTextField(
             value = notes, onValueChange = { notes = it }, enabled = writable,
             label = { Text("Notiz") }, minLines = 4,
-            modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+            modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 t.created?.let { "Erstellt " + DateTimeFormatter.ofPattern("dd.MM.yyyy").format(it.atZone(java.time.ZoneId.systemDefault())) }.orEmpty(),

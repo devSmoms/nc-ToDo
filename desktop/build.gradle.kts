@@ -20,6 +20,18 @@ kotlin {
     }
 }
 
+// Writes the version into the resources so the app can show it under "Über NC Todo".
+val versionResource = tasks.register("generateVersionResource") {
+    val out = layout.buildDirectory.dir("generated/version")
+    val version = appVersion
+    inputs.property("version", version)
+    outputs.dir(out)
+    doLast {
+        out.get().file("nctodo-version.txt").asFile.apply { parentFile.mkdirs() }.writeText(version)
+    }
+}
+sourceSets.main { resources.srcDir(versionResource) }
+
 dependencies {
     implementation(project(":core"))
     implementation(compose.desktop.currentOs)
