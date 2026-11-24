@@ -171,6 +171,13 @@ class TaskRepository(
         remoteOrThrow().updateList(list, name, color, description); sync()
     }
 
+    /** Moves lists into [group] (null = no group); online only, like all list settings. */
+    suspend fun setListGroup(lists: List<TaskList>, group: String?) {
+        val remote = remoteOrThrow()
+        lists.forEach { remote.setListGroup(it, group?.trim()?.takeIf { g -> g.isNotEmpty() }) }
+        sync()
+    }
+
     suspend fun deleteList(list: TaskList) {
         remoteOrThrow().deleteList(list); sync()
     }

@@ -11,8 +11,8 @@ android {
         applicationId = "de.devsmoms.nctodo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "2.3.1"
+        versionCode = 17
+        versionName = "2.4.0"
     }
 
     // Release signing comes from environment variables (GitHub Actions secrets or a local

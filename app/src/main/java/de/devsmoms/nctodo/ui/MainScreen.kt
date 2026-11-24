@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SwipeToDismissBox
@@ -169,6 +170,9 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
     var listDialog by remember { mutableStateOf<ListDialogMode?>(null) }
     var confirmDelete by remember { mutableStateOf<TaskList?>(null) }
     var accountDialog by remember { mutableStateOf(false) }
+    var groupPicker by remember { mutableStateOf<TaskList?>(null) }
+    var renameGroup by remember { mutableStateOf<String?>(null) }
+    var dissolveGroup by remember { mutableStateOf<String?>(null) }
 
     val sel = state.selection
     val currentList = (sel as? Selection.OfList)?.let { state.list(it.url) }
@@ -181,7 +185,7 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
         drawerState = drawer,
         drawerContent = {
             Drawer(state, onSelect = { vm.select(it); scope.launch { drawer.close() } }, onNewList = {
-                listDialog = ListDialogMode.Create
+                listDialog = ListDialogMode.Create()
                 scope.launch { drawer.close() }
             }, onSettings = {
                 vm.open(Screen.Settings)
@@ -190,7 +194,17 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
                 vm.open(Screen.Trash)
                 vm.loadTrash()
                 scope.launch { drawer.close() }
-            }, onAccounts = { accountDialog = true })
+            }, onAccounts = { accountDialog = true }, onGroupAction = { action ->
+                when (action) {
+                    is GroupAction.Toggle -> vm.toggleGroup(action.name)
+                    is GroupAction.NewList -> {
+                        listDialog = ListDialogMode.Create(group = action.name)
+                        scope.launch { drawer.close() }
+                    }
+                    is GroupAction.Rename -> renameGroup = action.name
+                    is GroupAction.Dissolve -> dissolveGroup = action.name
+                }
+            })
         },
     ) {
         Scaffold(
@@ -212,6 +226,11 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
                                         menu = false; listDialog = ListDialogMode.Edit(currentList)
                                     })
                                 }
+                                DropdownMenuItem(
+                                    text = { Text(if (currentList.group == null) "In Gruppe verschieben" else "Gruppe ändern") },
+                                    leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, null) },
+                                    onClick = { menu = false; groupPicker = currentList },
+                                )
                                 DropdownMenuItem(
                                     text = { Text(if (currentList.isOwner) "Liste löschen" else "Freigabe verlassen") },
                                     onClick = { menu = false; confirmDelete = currentList },
@@ -247,10 +266,35 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
         ListDialog(mode, onDismiss = { listDialog = null }) { name, color, description ->
             listDialog = null
             when (mode) {
-                is ListDialogMode.Create -> vm.createList(name, color, description)
+                is ListDialogMode.Create -> vm.createList(name, color, description, mode.group)
                 is ListDialogMode.Edit -> vm.updateList(mode.list, name, color, description)
             }
         }
+    }
+    groupPicker?.let { list ->
+        GroupPickerDialog(
+            listName = ListIcons.label(list.name),
+            current = list.group,
+            groups = groupedLists(state.lists).second.map { it.first },
+            onDismiss = { groupPicker = null },
+        ) { group ->
+            groupPicker = null
+            vm.moveListToGroup(list, group)
+        }
+    }
+    renameGroup?.let { name ->
+        RenameGroupDialog(name, onDismiss = { renameGroup = null }) { new ->
+            renameGroup = null
+            vm.renameGroup(name, new)
+        }
+    }
+    dissolveGroup?.let { name ->
+        ConfirmDialog(
+            title = "Gruppe „$name“ auflösen?",
+            text = "Die Listen bleiben erhalten und stehen danach ohne Gruppe im Menü.",
+            confirm = "Auflösen",
+            onDismiss = { dissolveGroup = null },
+        ) { dissolveGroup = null; vm.dissolveGroup(name) }
     }
     confirmDelete?.let { list ->
         ConfirmDialog(
@@ -525,6 +569,7 @@ private fun Drawer(
     onSettings: () -> Unit,
     onTrash: () -> Unit,
     onAccounts: () -> Unit,
+    onGroupAction: (GroupAction) -> Unit,
 ) {
     fun count(kind: SmartList) = visibleTasks(state.copy(selection = Selection.Smart(kind))).count { !it.todo.completed }
     val listState = rememberLazyListState()
@@ -564,20 +609,24 @@ private fun Drawer(
                 DrawerEntry(kind.title, icon, tint, count(kind), state.selection == Selection.Smart(kind)) { onSelect(Selection.Smart(kind)) }
             }
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp, horizontal = 16.dp)) }
-            items(state.lists, key = { it.url }) { list ->
-                val open = state.tasks[list.url].orEmpty().count { !it.todo.completed && it.todo.parentUid == null && it.url !in state.hidden }
-                val status = when {
-                    !list.isOwner && !list.canWrite -> Icons.Outlined.Lock
-                    !list.isOwner || list.shares.isNotEmpty() -> Icons.Outlined.People
-                    else -> null
+            val (ungrouped, groups) = groupedLists(state.lists)
+            items(ungrouped, key = { it.url }) { list -> DrawerListEntry(state, list, onSelect) }
+            groups.forEach { (name, lists) ->
+                val collapsed = name in state.settings.collapsedGroups
+                item(key = "group:$name") {
+                    GroupHeader(
+                        name = name,
+                        openCount = lists.sumOf { openCount(state, it) },
+                        collapsed = collapsed,
+                        containsSelection = lists.any { state.selection == Selection.OfList(it.url) },
+                        onToggle = { onGroupAction(GroupAction.Toggle(name)) },
+                        onNewList = { onGroupAction(GroupAction.NewList(name)) },
+                        onRename = { onGroupAction(GroupAction.Rename(name)) },
+                        onDissolve = { onGroupAction(GroupAction.Dissolve(name)) },
+                    )
                 }
-                // Own icon if set; otherwise the sharing state is the icon, as before.
-                val custom = ListIcons.iconOf(list.name)
-                DrawerEntry(
-                    ListIcons.label(list.name), custom ?: status ?: ListIcons.DEFAULT, parseColor(list.color), open,
-                    state.selection == Selection.OfList(list.url), statusIcon = if (custom != null) status else null,
-                ) {
-                    onSelect(Selection.OfList(list.url))
+                if (!collapsed) {
+                    items(lists, key = { it.url }) { list -> GroupedEntry { DrawerListEntry(state, list, onSelect) } }
                 }
             }
             item {
@@ -597,6 +646,36 @@ private fun Drawer(
             selected = false, onClick = onTrash,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
         )
+    }
+}
+
+/** Open top-level tasks of a list, as shown in the menu. */
+private fun openCount(state: UiState, list: TaskList): Int =
+    state.tasks[list.url].orEmpty().count { !it.todo.completed && it.todo.parentUid == null && it.url !in state.hidden }
+
+/** Actions from a group header in the menu. */
+sealed interface GroupAction {
+    val name: String
+    data class Toggle(override val name: String) : GroupAction
+    data class NewList(override val name: String) : GroupAction
+    data class Rename(override val name: String) : GroupAction
+    data class Dissolve(override val name: String) : GroupAction
+}
+
+@Composable
+private fun DrawerListEntry(state: UiState, list: TaskList, onSelect: (Selection) -> Unit) {
+    val status = when {
+        !list.isOwner && !list.canWrite -> Icons.Outlined.Lock
+        !list.isOwner || list.shares.isNotEmpty() -> Icons.Outlined.People
+        else -> null
+    }
+    // Own icon if set; otherwise the sharing state is the icon, as before.
+    val custom = ListIcons.iconOf(list.name)
+    DrawerEntry(
+        ListIcons.label(list.name), custom ?: status ?: ListIcons.DEFAULT, parseColor(list.color), openCount(state, list),
+        state.selection == Selection.OfList(list.url), statusIcon = if (custom != null) status else null,
+    ) {
+        onSelect(Selection.OfList(list.url))
     }
 }
 

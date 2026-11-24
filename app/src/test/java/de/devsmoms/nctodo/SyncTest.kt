@@ -73,6 +73,10 @@ class FakeRemote : Remote {
     }
     override suspend fun createList(name: String, color: String, description: String) = error("unused")
     override suspend fun updateList(list: TaskList, name: String, color: String, description: String) = error("unused")
+    override suspend fun setListGroup(list: TaskList, group: String?) {
+        val idx = lists.indexOfFirst { it.url == list.url }
+        lists[idx] = lists[idx].copy(group = group)
+    }
     override suspend fun deleteList(list: TaskList) = error("unused")
     override suspend fun share(list: TaskList, principal: String, canWrite: Boolean) = error("unused")
     override suspend fun unshare(list: TaskList, principal: String) = error("unused")

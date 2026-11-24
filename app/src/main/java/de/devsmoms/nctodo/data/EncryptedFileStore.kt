@@ -70,6 +70,7 @@ class EncryptedFileStore(context: Context, storage: AccountStorage) : LocalPersi
                     l.ctag?.let { put("ctag", it) }
                     l.description?.let { put("description", it) }
                     l.ownerPrincipal?.let { put("ownerPrincipal", it) }
+                    l.group?.let { put("group", it) }
                     put("shares", JSONArray().apply {
                         l.shares.forEach { s ->
                             put(JSONObject().put("principal", s.principal).put("name", s.displayName).put("write", s.canWrite))
@@ -113,6 +114,7 @@ class EncryptedFileStore(context: Context, storage: AccountStorage) : LocalPersi
                 ctag = l.optStringOrNull("ctag"),
                 description = l.optStringOrNull("description"),
                 ownerPrincipal = l.optStringOrNull("ownerPrincipal"),
+                group = l.optStringOrNull("group"),
             )
         }
         val tasks = o.optJSONArray("tasks").objects().mapNotNull { t ->

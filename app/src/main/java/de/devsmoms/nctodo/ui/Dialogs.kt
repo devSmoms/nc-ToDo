@@ -40,7 +40,8 @@ import de.devsmoms.nctodo.data.TaskList
 import de.devsmoms.nctodo.ui.theme.parseColor
 
 sealed interface ListDialogMode {
-    data object Create : ListDialogMode
+    /** [group]: the new list is put into this group (from the group menu). */
+    data class Create(val group: String? = null) : ListDialogMode
     data class Edit(val list: TaskList) : ListDialogMode
 }
 

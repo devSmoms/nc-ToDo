@@ -18,6 +18,8 @@ data class TaskList(
     val description: String? = null,
     /** Owner as "principal:principals/users/<name>" (for shared lists), null if unknown. */
     val ownerPrincipal: String? = null,
+    /** Group in the list overview (NC Todo dead property, per user); null = not grouped. */
+    val group: String? = null,
 ) {
     /** Lists whose changes can come from other people. */
     val isShared: Boolean get() = !isOwner || shares.isNotEmpty()
@@ -61,6 +63,7 @@ interface Remote {
 
     suspend fun createList(name: String, color: String, description: String = ""): String
     suspend fun updateList(list: TaskList, name: String, color: String, description: String = "")
+    suspend fun setListGroup(list: TaskList, group: String?)
     suspend fun deleteList(list: TaskList)
     suspend fun share(list: TaskList, principal: String, canWrite: Boolean)
     suspend fun unshare(list: TaskList, principal: String)

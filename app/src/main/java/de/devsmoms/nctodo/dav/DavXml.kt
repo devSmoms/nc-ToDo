@@ -16,6 +16,8 @@ object Ns {
     const val OC = "http://owncloud.org/ns"
     const val NC = "http://nextcloud.com/ns"
     const val SABRE = "http://sabredav.org/ns"
+    /** Own namespace for dead properties NC Todo stores on calendars (e.g. the list group). */
+    const val NCTODO = "http://devsmoms.de/ns/nctodo"
 }
 
 class DavResponse(
@@ -181,11 +183,12 @@ object DavXml {
 
     val PROPFIND_CALENDARS = HEADER + """
         <d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/"
-                    xmlns:a="http://apple.com/ns/ical/" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.com/ns">
+                    xmlns:a="http://apple.com/ns/ical/" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.com/ns"
+                    xmlns:n="http://devsmoms.de/ns/nctodo">
           <d:prop>
             <d:resourcetype/><d:displayname/><cs:getctag/><a:calendar-color/>
             <c:supported-calendar-component-set/><d:current-user-privilege-set/><c:calendar-description/>
-            <oc:invite/><oc:owner-principal/><nc:owner-displayname/>
+            <oc:invite/><oc:owner-principal/><nc:owner-displayname/><n:group/>
           </d:prop>
         </d:propfind>
     """.trimIndent()
@@ -214,6 +217,20 @@ object DavXml {
             <d:displayname>${esc(displayName)}</d:displayname>
             <a:calendar-color>${esc(color)}</a:calendar-color>${if (description.isNotBlank()) "\n            <c:calendar-description>${esc(description)}</c:calendar-description>" else ""}
           </d:prop></d:set>${if (description.isBlank()) "\n          <d:remove><d:prop><c:calendar-description/></d:prop></d:remove>" else ""}
+        </d:propertyupdate>
+    """.trimIndent()
+
+    /**
+     * Sets (or with null removes) the group of a list. Stored by Nextcloud as a dead property,
+     * per user, so on shared lists everybody keeps their own grouping; other apps ignore it.
+     */
+    fun setGroup(group: String?) = HEADER + if (group.isNullOrBlank()) """
+        <d:propertyupdate xmlns:d="DAV:" xmlns:n="http://devsmoms.de/ns/nctodo">
+          <d:remove><d:prop><n:group/></d:prop></d:remove>
+        </d:propertyupdate>
+    """.trimIndent() else """
+        <d:propertyupdate xmlns:d="DAV:" xmlns:n="http://devsmoms.de/ns/nctodo">
+          <d:set><d:prop><n:group>${esc(group.trim())}</n:group></d:prop></d:set>
         </d:propertyupdate>
     """.trimIndent()
 

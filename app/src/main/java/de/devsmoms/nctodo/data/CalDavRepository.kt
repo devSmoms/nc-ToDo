@@ -37,6 +37,7 @@ class CalDavRepository(private val creds: Credentials) : Remote {
                     shares = if (isOwner) DavXml.shares(r).filter { Principals.isUserOrGroup(it.principal) } else emptyList(),
                     ctag = r.text(Ns.CS, "getctag"),
                     description = r.text(Ns.CALDAV, "calendar-description"),
+                    group = r.text(Ns.NCTODO, "group")?.take(MAX_GROUP_LENGTH),
                     ownerPrincipal = ownerHref?.let { h -> h.substringAfter("principals/", "").takeIf { it.isNotEmpty() }?.let { "principal:principals/" + it.trimEnd('/') } },
                 )
             }
@@ -51,6 +52,14 @@ class CalDavRepository(private val creds: Credentials) : Remote {
 
     override suspend fun updateList(list: TaskList, name: String, color: String, description: String) {
         client.proppatch(list.url, DavXml.proppatch(name.trim(), color, description.trim()))
+    }
+
+    override suspend fun setListGroup(list: TaskList, group: String?) {
+        val res = client.proppatch(list.url, DavXml.setGroup(group))
+        // PROPPATCH answers 207 even when a property is refused: check the property's own status.
+        val ok = runCatching { DavXml.parseMultistatus(res.body, list.url) }.getOrNull()
+            ?.any { it.prop(Ns.NCTODO, "group") != null } ?: true
+        if (!ok) throw DavException("Der Server speichert keine Listengruppen")
     }
 
     /** For own lists this deletes the list; for shared lists Nextcloud removes the share for this user. */
@@ -183,6 +192,7 @@ class CalDavRepository(private val creds: Credentials) : Remote {
     }.getOrNull()
 
     companion object {
+        const val MAX_GROUP_LENGTH = 60
         val COLORS = listOf("#0082C9", "#2E7D32", "#C62828", "#6A1B9A", "#EF6C00", "#00838F", "#AD1457", "#455A64")
 
         fun normalizeColor(raw: String?): String {

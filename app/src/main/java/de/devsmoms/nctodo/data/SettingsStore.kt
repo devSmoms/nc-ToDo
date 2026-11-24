@@ -35,6 +35,8 @@ data class Settings(
     val confirmRemovals: Boolean = true,
     /** Hide the lists Nextcloud Deck creates for its boards ("Deck: …"). */
     val hideDeckLists: Boolean = true,
+    /** List groups collapsed in the menu. */
+    val collapsedGroups: Set<String> = emptySet(),
 ) {
     companion object {
         const val START_LAST = "last"
@@ -81,6 +83,7 @@ class SettingsStore(context: Context, private val prefsName: String) {
             linkPreviews = prefs.getBoolean("linkPreviews", d.linkPreviews),
             confirmRemovals = prefs.getBoolean("confirmRemovals", d.confirmRemovals),
             hideDeckLists = prefs.getBoolean("hideDeckLists", d.hideDeckLists),
+            collapsedGroups = prefs.getStringSet("collapsedGroups", null)?.toSet() ?: d.collapsedGroups,
         )
     }
 
@@ -100,6 +103,8 @@ class SettingsStore(context: Context, private val prefsName: String) {
             .putBoolean("linkPreviews", s.linkPreviews)
             .putBoolean("confirmRemovals", s.confirmRemovals)
             .putBoolean("hideDeckLists", s.hideDeckLists)
+            // Always a fresh set: SharedPreferences must not hold on to a set it handed out.
+            .putStringSet("collapsedGroups", HashSet(s.collapsedGroups))
             .apply()
         _settings.value = s
     }

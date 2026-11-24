@@ -435,12 +435,43 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------------------------------------------------------------- lists & sharing (online only)
 
-    fun createList(name: String, color: String, description: String = "") = launchSafe {
+    fun createList(name: String, color: String, description: String = "", group: String? = null) = launchSafe {
         val url = repo.createList(name, color, description)
         select(Selection.OfList(url))
+        if (group != null) {
+            repo.data.value.lists.firstOrNull { it.url == url }?.let { repo.setListGroup(listOf(it), group) }
+        }
     }
 
     fun updateList(list: TaskList, name: String, color: String, description: String = "") = launchSafe { repo.updateList(list, name, color, description) }
+
+    // ---------------------------------------------------------------- list groups
+
+    /** Moves one list into a group (null = remove from its group). */
+    fun moveListToGroup(list: TaskList, group: String?) = launchSafe {
+        val g = group?.trim()?.takeIf { it.isNotEmpty() }
+        repo.setListGroup(listOf(list), g)
+        message(if (g == null) "Aus der Gruppe entfernt" else "In „$g“ verschoben")
+    }
+
+    /** Renames a group by moving all its lists; merges into an existing group of that name. */
+    fun renameGroup(old: String, new: String) = launchSafe {
+        val target = new.trim()
+        if (target.isEmpty() || target == old) return@launchSafe
+        repo.setListGroup(state.value.lists.filter { it.group == old }, target)
+        updateSettings { s -> s.copy(collapsedGroups = s.collapsedGroups.map { if (it == old) target else it }.toSet()) }
+    }
+
+    /** Dissolves a group; its lists stay and appear ungrouped. */
+    fun dissolveGroup(group: String) = launchSafe {
+        repo.setListGroup(state.value.lists.filter { it.group == group }, null)
+        updateSettings { s -> s.copy(collapsedGroups = s.collapsedGroups - group) }
+        message("Gruppe „$group“ aufgelöst")
+    }
+
+    fun toggleGroup(group: String) = updateSettings { s ->
+        s.copy(collapsedGroups = if (group in s.collapsedGroups) s.collapsedGroups - group else s.collapsedGroups + group)
+    }
 
     fun deleteList(list: TaskList) = launchSafe {
         repo.deleteList(list)
