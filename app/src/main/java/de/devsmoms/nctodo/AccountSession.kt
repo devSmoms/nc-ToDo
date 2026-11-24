@@ -45,7 +45,10 @@ class AccountSession private constructor(
     val settings: StateFlow<Settings> = settingsStore.settings
 
     /** Credentials as shown in the app: the own account name (if set) replaces the Nextcloud name. */
-    val shownCredentials: Flow<Credentials> = combine(credentials, settings) { c, s -> c.copy(displayName = shownName(c, s)) }
+    // Uses _credentials: in initializers the constructor parameter "credentials" would shadow the property.
+    val shownCredentials: Flow<Credentials> = combine(_credentials, settingsStore.settings) { c: Credentials, s: Settings ->
+        c.copy(displayName = shownName(c, s))
+    }
 
     /** Name shown for this account right now. */
     fun displayName(): String = shownName(credentials.value, settings.value)
