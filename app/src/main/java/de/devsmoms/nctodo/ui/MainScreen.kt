@@ -96,7 +96,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.delay
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -105,6 +105,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -445,18 +446,19 @@ private fun SwipeToDelete(
     content: @Composable () -> Unit,
 ) {
     val writable = state.list(item.listUrl)?.canWrite == true
-    val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    val offset = remember { Animatable(0f) }
+    // Plain state, written synchronously while dragging: no coroutine can arrive late and
+    // cancel the fly-out animation (that left rows stuck half-way before).
+    var offset by remember { mutableFloatStateOf(0f) }
     var width by remember { mutableIntStateOf(0) }
     var leaving by remember { mutableStateOf(false) }
     val threshold = width * SWIPE_DELETE_FRACTION
-    val armed = width > 0 && abs(offset.value) >= threshold
+    val armed = width > 0 && abs(offset) >= threshold
     // Short vibration when crossing the threshold in either direction.
     LaunchedEffect(armed) { if (armed && !leaving) haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
 
     val dragState = rememberDraggableState { delta ->
-        if (!leaving) scope.launch { offset.snapTo((offset.value + delta).coerceIn(-width.toFloat(), width.toFloat())) }
+        if (!leaving) offset = (offset + delta).coerceIn(-width.toFloat(), width.toFloat())
     }
     Box(
         modifier.fillMaxWidth().onSizeChanged { width = it.width }
@@ -465,25 +467,32 @@ private fun SwipeToDelete(
                 orientation = Orientation.Horizontal,
                 enabled = writable && !leaving,
                 onDragStopped = {
-                    if (width > 0 && abs(offset.value) >= threshold) {
+                    if (width > 0 && abs(offset) >= threshold) {
                         leaving = true
-                        val target = sign(offset.value) * width * 1.05f
+                        val target = sign(offset) * width * 1.05f
                         // Accelerating ease-in: slow at the finger, fast at the edge.
-                        val remaining = abs(target - offset.value) / (width * 1.05f)
-                        offset.animateTo(
-                            target,
-                            tween(durationMillis = (SWIPE_FLY_OUT_MS * remaining).toInt().coerceAtLeast(90), easing = FastOutLinearInEasing),
-                        )
-                        // Removing the row lets the rows below slide up (animateItem).
-                        vm.swipeDelete(item)
+                        val remaining = abs(target - offset) / (width * 1.05f)
+                        try {
+                            animate(
+                                initialValue = offset, targetValue = target,
+                                animationSpec = tween((SWIPE_FLY_OUT_MS * remaining).toInt().coerceAtLeast(90), easing = FastOutLinearInEasing),
+                            ) { value, _ -> offset = value }
+                        } finally {
+                            // Delete even if the animation was interrupted; removing the row lets
+                            // the rows below slide up (animateItem).
+                            vm.swipeDelete(item)
+                        }
                     } else {
-                        offset.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+                        animate(
+                            initialValue = offset, targetValue = 0f,
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+                        ) { value, _ -> offset = value }
                     }
                 },
             ),
     ) {
-        if (offset.value != 0f) {
-            val fromStart = offset.value > 0
+        if (offset != 0f) {
+            val fromStart = offset > 0
             Box(
                 Modifier.matchParentSize().padding(horizontal = 12.dp, vertical = 3.dp)
                     .clip(RoundedCornerShape(8.dp))
@@ -503,7 +512,7 @@ private fun SwipeToDelete(
                 }
             }
         }
-        Box(Modifier.graphicsLayer { translationX = offset.value }) { content() }
+        Box(Modifier.graphicsLayer { translationX = offset }) { content() }
     }
 }
 
