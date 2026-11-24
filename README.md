@@ -84,6 +84,19 @@ Voraussetzungen: Android 8.0 oder neuer, Nextcloud mit gültigem HTTPS-Zertifika
 
 Dabei legt Nextcloud automatisch ein eigenes App-Passwort an. Es erscheint unter *Einstellungen → Sicherheit → Geräte & Sitzungen* als „NC Todo (Gerätename)“ und lässt sich dort jederzeit widerrufen. Wer lieber selbst ein App-Passwort erstellt, wählt „Stattdessen mit App-Passwort anmelden“.
 
+## Desktop-App für Windows und Linux (Beta)
+
+<img src="docs/screenshots/desktop.png" width="720" alt="Desktop-App unter Windows">
+
+Unter **[Releases](../../releases)** gibt es neben der APK auch einen Windows-Installer (`.msi`) und ein Paket für Debian/Ubuntu (`.deb`). Die Desktop-App nutzt dieselbe Sync-Logik wie Android und ist wie Microsoft To Do aufgebaut: Listen links, Aufgaben in der Mitte, Details rechts.
+
+- Anmeldung im Browser wie auf Android, Offline-Speicher verschlüsselt
+- Zugangsdaten im System-Schlüsselbund: Windows-Datenschutz-API (DPAPI), unter Linux der Schlüsselbund des Desktops über `secret-tool` – dafür muss das Paket **`libsecret-tools`** installiert sein (`sudo apt install libsecret-tools`)
+- Tastenkürzel: **Strg+N** neue Aufgabe, **Strg+F** Suche, **Strg+R** synchronisieren, **Entf** ausgewählte Aufgabe löschen; Rechtsklick auf eine Aufgabe für weitere Aktionen
+- Windows zeigt beim ersten Start eventuell „Unbekannter Herausgeber“ (SmartScreen), weil der Installer nicht kostenpflichtig signiert ist: *Weitere Informationen → Trotzdem ausführen*
+
+Noch nicht in der Desktop-App: mehrere Konten, Teilen, Gruppen bearbeiten, Wiederholungen, Links, Benachrichtigungen und Infobereich.
+
 ## Sicherheit
 
 - **Anmeldung im Browser**: Das Kontopasswort gibst du nur auf der Seite deiner Nextcloud ein, die App sieht es nie. Die App nimmt das erzeugte App-Passwort nur von genau dem Server an, dessen Adresse du eingegeben hast (HTTPS, gleicher Host und Port).
@@ -110,7 +123,8 @@ Dabei legt Nextcloud automatisch ein eigenes App-Passwort an. Es erscheint unter
 
 1. Projekt in Android Studio öffnen (*File → Open*), Gradle-Sync abwarten. Bei der Frage nach dem Gradle-JDK „Embedded JDK“ wählen.
 2. Direkt auf dem Handy starten (▶) oder *Build → Generate Signed App Bundle / APK → APK*.
-3. Unit-Tests liegen in `core/src/test/…` (Parser/Protokoll, Offline-Sync mit simuliertem Server, Konten-Speicher, Listengruppen, Login): Rechtsklick → *Run* oder `gradlew :core:test`.
+3. Desktop-App starten: `gradlew :desktop:run`; Installer bauen: `gradlew :desktop:packageMsi` (unter Windows) bzw. `gradlew :desktop:packageDeb` (unter Linux).
+4. Unit-Tests liegen in `core/src/test/…` (Parser/Protokoll, Offline-Sync mit simuliertem Server, Konten-Speicher, Listengruppen, Login): Rechtsklick → *Run* oder `gradlew :core:test`.
 
 ### Aufbau
 
@@ -120,6 +134,7 @@ core/      gemeinsamer Code ohne Android – läuft auch auf dem Desktop
   dav/     WebDAV/CalDAV-XML, HTTP-Client, Principal-Helfer
   data/    CalDAV-Zugriff, Modelle, Login Flow v2, Konten-Speichernamen
   sync/    Offline-Sync-Engine (Warteschlange, Konfliktauflösung)
+desktop/   Desktop-App für Windows und Linux (Compose Multiplatform)
 app/       Android-App
   data/    verschlüsselte Zugangsdaten und Offline-Speicher (Android Keystore), Einstellungen
   sync/    WorkManager-Jobs, Benachrichtigungen
@@ -130,9 +145,9 @@ app/       Android-App
 
 ### Release veröffentlichen (für Maintainer)
 
-1. In `app/build.gradle.kts` `versionCode` (+1) und `versionName` erhöhen, committen.
+1. In `gradle.properties` `nctodo.versionName` und in `app/build.gradle.kts` `versionCode` (+1) erhöhen, committen.
 2. Tag setzen und pushen, z. B. `git tag -a v2.2.0 -m "Version 2.2.0"` und `git push origin v2.2.0`.
-3. Die GitHub Action „Release APK“ baut die signierte APK und hängt sie an das Release.
+3. Die GitHub Action „Release“ baut die signierte APK sowie den Windows- und Linux-Installer und hängt alles an ein gemeinsames Release.
 
 Benötigte Repository-Secrets (*Settings → Secrets and variables → Actions*):
 `SIGNING_KEYSTORE_BASE64`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD`.

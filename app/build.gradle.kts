@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 22
-        versionName = "2.3.0"
+        versionName = providers.gradleProperty("nctodo.versionName").get()
     }
 
     // Release signing comes from environment variables (GitHub Actions secrets or a local

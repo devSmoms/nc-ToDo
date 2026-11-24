@@ -16,6 +16,56 @@ object MiniJson {
         value as? Map<String, Any?>
     }.getOrNull()
 
+    /** Serializes maps, lists, strings, numbers, booleans and null to compact JSON. */
+    fun write(value: Any?): String = StringBuilder().also { writeTo(it, value) }.toString()
+
+    private fun writeTo(sb: StringBuilder, v: Any?) {
+        when (v) {
+            null -> sb.append("null")
+            is String -> quote(sb, v)
+            is Boolean -> sb.append(v)
+            is Int, is Long -> sb.append(v)
+            is Number -> {
+                val d = v.toDouble()
+                require(d.isFinite()) { "JSON cannot hold $d" }
+                sb.append(if (d == Math.floor(d) && Math.abs(d) < 1e15) d.toLong().toString() else d.toString())
+            }
+            is Map<*, *> -> {
+                sb.append('{')
+                var first = true
+                v.forEach { (k, value) ->
+                    if (!first) sb.append(',')
+                    first = false
+                    quote(sb, k.toString())
+                    sb.append(':')
+                    writeTo(sb, value)
+                }
+                sb.append('}')
+            }
+            is Iterable<*> -> {
+                sb.append('[')
+                v.forEachIndexed { i, value -> if (i > 0) sb.append(','); writeTo(sb, value) }
+                sb.append(']')
+            }
+            else -> throw IllegalArgumentException("Unsupported JSON type ${v.javaClass}")
+        }
+    }
+
+    private fun quote(sb: StringBuilder, s: String) {
+        sb.append('"')
+        for (c in s) {
+            when (c) {
+                '"' -> sb.append("\\\"")
+                '\\' -> sb.append("\\\\")
+                '\n' -> sb.append("\\n")
+                '\r' -> sb.append("\\r")
+                '\t' -> sb.append("\\t")
+                else -> if (c < ' ' || c == '\u2028' || c == '\u2029') sb.append("\\u%04x".format(c.code)) else sb.append(c)
+            }
+        }
+        sb.append('"')
+    }
+
     /** String value of [key], or "" if missing or not a string. */
     fun string(obj: Map<*, *>, key: String): String = obj[key] as? String ?: ""
 

@@ -15,6 +15,18 @@ Die vollständigen Lizenztexte liegen unter `app/src/main/assets/licenses/` und 
 | Reorderable (`sh.calvin.reorderable`) | Calvin Liang | Apache-2.0 |
 | Protocol Buffers Lite (umbenannt in DataStore enthalten) | Google Inc. | BSD-3-Clause |
 
+## Desktop-App (Windows/Linux)
+
+Zusätzlich zu Kotlin, kotlinx.coroutines, OkHttp und Okio (siehe oben) enthält die Desktop-App:
+
+| Bibliothek | Copyright | Lizenz |
+|---|---|---|
+| Compose Multiplatform (UI, Foundation, Material 3, Material Icons, Skiko) | JetBrains s.r.o. / The Android Open Source Project | Apache-2.0 |
+| JNA, JNA Platform | Timothy Wall and contributors | Apache-2.0 (dual-lizenziert mit LGPL-2.1, genutzt unter Apache-2.0) |
+| Java-Laufzeitumgebung (im Installer enthalten) | Oracle and/or its affiliates, Eclipse Adoptium | GPL-2.0 mit Classpath Exception |
+
+Die Lizenztexte liegen in der Desktop-App unter `licenses/` (Apache-2.0, GPL-3.0).
+
 Nur zum Testen (nicht in der APK): JUnit 4 (EPL-1.0), kotlin-test (Apache-2.0).
 
 Vollständige Liste aller Abhängigkeiten prüfen:
