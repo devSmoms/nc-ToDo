@@ -1,93 +1,119 @@
 # NC Todo
 
-Android-App für Nextcloud-Aufgaben (CalDAV/VTODO), bedient sich ähnlich wie Microsoft To Do.
-
-## Funktionen
-
-- Anmeldung per CalDAV (Server-URL, Benutzername, App-Passwort), automatische Erkennung von `/remote.php/dav` bzw. `/.well-known/caldav`
-- **Mehrere Konten**, auch auf verschiedenen Servern: Tipp auf Avatar oder Namen oben im Menü öffnet die Kontoauswahl (wechseln, hinzufügen, abmelden). Jedes Konto hat eigene Listen, Offline-Daten und Einstellungen. Beim Abmelden werden alle Daten dieses Kontos vom Gerät gelöscht. Widgets zeigen ein wählbares Konto, das Schnell-Anlegen bietet die Listen aller Konten an.
-- Intelligente Listen: **Mein Tag** (heute fällig oder überfällig), **Wichtig** (Stern), **Geplant** (mit Fälligkeitsdatum), **Aufgaben** (alle)
-- Eigene Listen anlegen, umbenennen, einfärben, löschen
-- **Listengruppen**: Listen im Menü in auf- und zuklappbare Gruppen sortieren (z. B. „Arbeit“, „Familie“). Die Gruppe wird als eigene WebDAV-Eigenschaft am Kalender gespeichert, Namen bleiben in Nextcloud unverändert, andere Apps ignorieren sie. Neue Gruppen über das Ordner-Symbol neben „Neue Liste“.
-- **Reihenfolge per Drag & Drop**: Liste im Menü gedrückt halten und an eine andere Stelle oder in eine Gruppe ziehen; bei langen Menüs scrollt es automatisch mit. Die Position wird ebenfalls als WebDAV-Eigenschaft gespeichert.
-- Listen teilen mit **Nextcloud-Benutzern** des eigenen Servers: **Nur lesen** oder **Kann bearbeiten**, umschaltbar, entfernbar
-- Mit dir geteilte Listen werden angezeigt (schreibgeschützte mit Schloss-Symbol), du kannst sie auch verlassen
-- Aufgaben: abhaken, Stern, Fälligkeitsdatum, „Zu Mein Tag hinzufügen“, Notizen, **Schritte** (Unteraufgaben, kompatibel mit Nextcloud Tasks)
-- Beim Hinzufügen erscheinen Schnelloptionen: **Mein Tag**, **Fälligkeit** (Heute, Morgen, Nächste Woche, Datum) und **Wichtig**
-- Aufgaben **per Wischen nach links oder rechts löschen**, mit „Rückgängig“ in der Hinweisleiste
-- **Listen-Symbole**: einfarbige Icons in der Listenfarbe (29 zur Auswahl). Gespeichert als Emoji am Anfang des Namens (z. B. „🛒 Einkauf“), dadurch per CalDAV synchronisiert; in der App immer als einfarbiges Icon angezeigt, fremde Emojis ohne passendes Icon werden ausgeblendet
-- **Startbildschirm** einstellbar: zuletzt geöffnet, eine intelligente Liste oder eine bestimmte Liste
-- **Widget für den Startbildschirm**: zeigt die offenen Aufgaben einer wählbaren Liste oder Ansicht (Mein Tag, Wichtig, …), Abhaken direkt im Widget, „+“ öffnet das Schnell-Anlegen, Tippen öffnet die Aufgabe in der App. Liste per langem Druck → „Widget anpassen“ änderbar (Android 12+). Option „Tippen öffnet immer die App“: jeder Tipp aufs Widget öffnet die Liste in der App.
-- **Kachel „Neue Aufgabe“ in den Schnelleinstellungen** (Menü von oben herunterwischen): öffnet ein kleines Fenster zum Anlegen mit Listenauswahl, Mein Tag, Fälligkeit und Wichtig. Bei gesperrtem Gerät muss zuerst entsperrt werden. Einrichten: Schnelleinstellungen aufklappen → Stift/Bearbeiten → Kachel „Neue Aufgabe“ in den aktiven Bereich ziehen.
-- **Fälligkeit mit Uhrzeit** oder ganztägig; in den Einstellungen wählbar, ob neue Fälligkeiten standardmäßig ganztägig sind
-- **Wiederholung**: täglich, werktags, wöchentlich, monatlich, jährlich oder „alle N Tage/Wochen/Monate/Jahre“ (RRULE). Beim Abhaken springt die Aufgabe auf den nächsten Termin, Schritte werden zurückgesetzt und ein erledigter Eintrag bleibt als Verlauf – wie bei Microsoft To Do
-- **Links**: beliebig viele pro Aufgabe (gespeichert als ATTACH), angezeigt als Vorschaukarte mit Titel und Bild; Link aus der Zwischenablage wird vorgeschlagen. Vorschau abschaltbar
-- **Zuständige Person**: eine Person aus der Freigabe der Liste (gespeichert als ATTENDEE ohne ORGANIZER – Nextcloud verschickt dadurch keine Einladungs-Mails)
-- **Listenbeschreibung** (calendar-description), unter dem Listentitel angezeigt
-- **Deck-Listen ausblenden**: Listen, die Nextcloud Deck für seine Boards anlegt („Deck: …“), werden standardmäßig überall ausgeblendet (abschaltbar)
-- **Papierkorb** (Nextcloud 22+): gelöschte Aufgaben und Listen wiederherstellen oder endgültig löschen
-- Zum Aktualisieren nach unten ziehen; Änderungen erscheinen sofort und werden im Hintergrund gespeichert
-- **Offline nutzbar**: alle Listen und Aufgaben liegen verschlüsselt auf dem Gerät. Aufgaben anlegen, bearbeiten, abhaken und löschen geht auch ohne Netz; die Änderungen werden übertragen, sobald wieder eine Verbindung besteht (auch bei geschlossener App). Bei gleichzeitigen Änderungen werden nur die selbst geänderten Felder auf die Server-Version übertragen, Änderungen anderer bleiben erhalten.
-- **Einstellungen**: Design (System/Hell/Dunkel), Synchronisierung beim Öffnen (immer / nach einstellbarer Pause / nie), Intervall bei geöffneter App und im Hintergrund, Benachrichtigungen (tägliche Erinnerung an fällige Aufgaben mit Uhrzeit, Änderungen anderer in geteilten Listen), Abmelden
-
-> Inoffizielle App – kein Produkt der Nextcloud GmbH und nicht mit Microsoft verbunden. „Nextcloud“ ist eine Marke der Nextcloud GmbH.
+Android-App für die Aufgaben deiner Nextcloud (CalDAV/VTODO) – bedient sich ähnlich wie Microsoft To Do: intelligente Listen, Schritte, „Mein Tag“, geteilte Listen, Widgets und Offline-Betrieb.
 
 > **Beta:** Diese App wurde mit Unterstützung von KI entwickelt. Sie wird ohne Gewährleistung bereitgestellt und befindet sich im Beta-Stadium – Fehler und Abstürze sind möglich. Rückmeldungen gerne über *Issues*.
 
+> Inoffizielle App – kein Produkt der Nextcloud GmbH und nicht mit Microsoft verbunden. „Nextcloud“ ist eine Marke der Nextcloud GmbH.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/mein-tag.png" width="220" alt="Mein Tag"><br><sub>Mein Tag</sub></td>
+    <td align="center"><img src="docs/screenshots/menue-gruppen.png" width="220" alt="Menü mit Listengruppen"><br><sub>Menü mit Gruppen</sub></td>
+    <td align="center"><img src="docs/screenshots/aufgabe.png" width="220" alt="Aufgabendetails"><br><sub>Aufgabe mit Schritten und Links</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/teilen.png" width="220" alt="Liste teilen"><br><sub>Liste teilen</sub></td>
+    <td align="center"><img src="docs/screenshots/konten.png" width="220" alt="Kontoauswahl"><br><sub>Mehrere Konten</sub></td>
+    <td align="center"><img src="docs/screenshots/einstellungen.png" width="220" alt="Einstellungen"><br><sub>Einstellungen</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/widget.png" width="220" alt="Widgets auf dem Startbildschirm"><br><sub>Widgets</sub></td>
+    <td></td>
+    <td></td>
+  </tr>
+</table>
+
+<sub>Die Bilder sind Renderings mit Beispieldaten.</sub>
+
+## Funktionen
+
+### Listen und Aufgaben
+- Intelligente Listen: **Mein Tag** (heute fällig oder überfällig), **Wichtig** (Stern), **Geplant** (mit Fälligkeit), **Aufgaben** (alle)
+- Eigene Listen anlegen, umbenennen, einfärben, löschen; optionale **Listenbeschreibung**
+- **Listen-Symbole**: 29 einfarbige Icons in der Listenfarbe. Gespeichert als Emoji am Anfang des Namens (z. B. „🛒 Einkauf“) und dadurch per CalDAV synchronisiert
+- **Listengruppen**: auf- und zuklappbare Gruppen im Menü. Neue Gruppe über das Ordner-Symbol neben „Neue Liste“
+- **Reihenfolge per Drag & Drop**: Liste im Menü gedrückt halten und an eine andere Stelle oder in eine Gruppe ziehen; bei langen Menüs scrollt es automatisch mit. Gruppe und Position werden als eigene WebDAV-Eigenschaften gespeichert – Listennamen bleiben in Nextcloud unverändert, andere Apps ignorieren sie
+- Aufgaben: abhaken, Stern, Notizen, „Zu Mein Tag hinzufügen“, **Schritte** (Unteraufgaben, kompatibel mit Nextcloud Tasks)
+- **Fälligkeit mit Uhrzeit** oder ganztägig (Standard einstellbar)
+- **Wiederholung**: täglich, werktags, wöchentlich, monatlich, jährlich oder „alle N Tage/Wochen/Monate/Jahre“. Beim Abhaken springt die Aufgabe auf den nächsten Termin, Schritte werden zurückgesetzt und ein erledigter Eintrag bleibt als Verlauf
+- **Links**: beliebig viele pro Aufgabe, als Vorschaukarte mit Titel und Bild (abschaltbar)
+- **Zuständige Person** aus der Freigabe der Liste (ohne Einladungs-Mails)
+- Schnelloptionen beim Hinzufügen: **Mein Tag**, **Fälligkeit**, **Wichtig**
+- Aufgaben **per Wischen löschen** (über die halbe Breite), mit „Rückgängig“
+- **Papierkorb** (Nextcloud 22+): gelöschte Aufgaben und Listen wiederherstellen oder endgültig löschen
+- **Deck-Listen ausblenden**: Listen von Nextcloud Deck („Deck: …“) werden standardmäßig ausgeblendet
+
+### Teilen und Konten
+- Listen mit **Nextcloud-Benutzern** teilen: **Nur lesen** oder **Kann bearbeiten**, jederzeit änderbar
+- Mit dir geteilte Listen erscheinen automatisch (schreibgeschützte mit Schloss-Symbol) und lassen sich verlassen
+- **Mehrere Konten**, auch auf verschiedenen Servern: Tipp auf Avatar oder Namen oben im Menü → wechseln, hinzufügen, abmelden. Jedes Konto hat eigene Listen, Offline-Daten und Einstellungen
+
+### Startbildschirm und System
+- **Widgets**: offene Aufgaben einer wählbaren Liste oder Ansicht, Abhaken direkt im Widget, „+“ zum schnellen Anlegen; bei mehreren Konten ist das Konto wählbar
+- **Kachel „Neue Aufgabe“** in den Schnelleinstellungen (Menü von oben herunterwischen → Stift → Kachel hinzufügen)
+- **Benachrichtigungen**: tägliche Erinnerung an fällige Aufgaben (Uhrzeit wählbar) und Änderungen anderer in geteilten Listen
+
+### Offline und Synchronisierung
+- Alle Listen und Aufgaben liegen **verschlüsselt auf dem Gerät**. Anlegen, Bearbeiten, Abhaken und Löschen geht auch ohne Netz; Änderungen werden übertragen, sobald wieder eine Verbindung besteht – auch bei geschlossener App
+- Bei gleichzeitigen Änderungen werden nur die selbst geänderten Felder übertragen, Änderungen anderer bleiben erhalten
+- Einstellbar: Synchronisierung beim Öffnen (immer / nach einer Pause / nie), Intervall bei geöffneter App und im Hintergrund
+- Weitere Einstellungen: Design (System/Hell/Dunkel), Startbildschirm, Rückfragen beim Entfernen
+
 ## Download
 
-Fertige APKs gibt es unter **Releases** (rechts auf der GitHub-Seite). Installation: APK auf dem Handy öffnen und „Aus dieser Quelle installieren“ erlauben.
+Fertige, signierte APKs gibt es unter **[Releases](../../releases)**. Installation: APK auf dem Handy öffnen und „Aus dieser Quelle installieren“ erlauben.
 
-## Bauen
+Voraussetzungen: Android 8.0 oder neuer, Nextcloud mit gültigem HTTPS-Zertifikat (z. B. Let's Encrypt).
 
-1. Ordner in Android Studio öffnen (*File → Open*), Gradle-Sync abwarten.
-   Falls Android Studio Updates für das Android-Gradle-Plugin/Kotlin vorschlägt, kannst du sie übernehmen.
-2. *Build → Generate Signed App Bundle / APK → APK* für eine Release-Version, oder direkt auf dem Handy starten (▶).
-3. Unit-Tests: `app/src/test/.../CoreTest.kt` (Parser/Protokoll) und `SyncTest.kt` (Offline-Sync mit simuliertem Server) – Rechtsklick → Run.
-
-Voraussetzungen: Android 8.0+, Nextcloud mit gültigem HTTPS-Zertifikat (z. B. Let's Encrypt).
+**Tipp:** In Nextcloud unter *Einstellungen → Sicherheit → Geräte & Sitzungen* ein eigenes App-Passwort für NC Todo erstellen. Es lässt sich jederzeit widerrufen und ist bei Zwei-Faktor-Anmeldung ohnehin nötig.
 
 ## Sicherheit
 
-- **Zugangsdaten** werden mit AES-256-GCM verschlüsselt, mit einem eigenen Schlüssel pro Konto. Der Schlüssel liegt im Android Keystore (Hardware/StrongBox, falls vorhanden) und kann nicht ausgelesen oder exportiert werden. Die verschlüsselten Daten liegen im privaten App-Speicher.
+- **Zugangsdaten** werden mit AES-256-GCM verschlüsselt, mit einem eigenen Schlüssel pro Konto. Der Schlüssel liegt im Android Keystore (Hardware/StrongBox, falls vorhanden) und kann weder ausgelesen noch exportiert werden.
+- Der **Offline-Speicher** ist ebenfalls AES-256-GCM-verschlüsselt (eigener Keystore-Schlüssel) und liegt im privaten App-Speicher.
 - **Kein Backup**: `allowBackup=false` und Data-Extraction-Rules verhindern, dass Daten per Cloud-Backup oder Geräteumzug das Gerät verlassen.
-- **Nur HTTPS**, TLS 1.2+, keine Klartext-Verbindungen, keine Weiterleitung von HTTPS auf HTTP, nur System-Zertifizierungsstellen (keine vom Nutzer installierten CAs).
-- Das Passwort wird **nur an den angemeldeten Server** geschickt; Verweise des Servers auf fremde Adressen werden abgelehnt.
-- XML-Antworten werden gegen XXE/Entity-Angriffe gehärtet geparst, Eingaben in XML und iCalendar werden escaped (keine Injection über Titel oder Notizen).
-- Bearbeitungen nutzen ETags (`If-Match`), damit gleichzeitige Änderungen anderer nicht überschrieben werden.
-- Unbekannte iCalendar-Daten (Erinnerungen, Wiederholungen, Felder anderer Apps) bleiben beim Bearbeiten erhalten.
-- Login-Bildschirm ist vor Screenshots und Bildschirmaufnahmen geschützt (`FLAG_SECURE`), nichts wird geloggt.
-- Der **Offline-Speicher** (Listen, Aufgaben, Warteschlange) liegt ebenfalls AES-256-GCM-verschlüsselt mit eigenem Keystore-Schlüssel im privaten, nicht gesicherten App-Speicher.
-- Benachrichtigungen zeigen auf dem Sperrbildschirm nur die Anzahl, keine Aufgabentitel.
-- Die Schnelleinstellungs-Kachel verlangt bei gesperrtem Gerät zuerst das Entsperren. Hinweis: Das Widget zeigt Aufgabentitel auf dem Startbildschirm – wer das nicht möchte, platziert es nicht.
-- Beim Abmelden werden Zugangsdaten, Offline-Daten, Schlüssel, geplante Hintergrundjobs und Benachrichtigungen gelöscht. Bei einem Kontowechsel sieht das neue Konto nie den Cache des alten.
+- **Nur HTTPS** (TLS 1.2+), keine Klartext-Verbindungen, nur System-Zertifizierungsstellen.
+- Das Passwort wird **nur an den angemeldeten Server** geschickt; Verweise auf fremde Adressen werden abgelehnt. Link-Vorschauen laufen über einen eigenen Client ohne Zugangsdaten.
+- XML wird gegen XXE/Entity-Angriffe gehärtet geparst, Eingaben in XML und iCalendar werden escaped.
+- Bearbeitungen nutzen ETags (`If-Match`), damit Änderungen anderer nicht überschrieben werden. Unbekannte iCalendar-Daten anderer Apps bleiben erhalten.
+- Login-Bildschirm ist vor Screenshots geschützt (`FLAG_SECURE`), nichts wird geloggt.
+- Benachrichtigungen zeigen auf dem Sperrbildschirm nur die Anzahl, keine Titel. Die Schnelleinstellungs-Kachel verlangt bei gesperrtem Gerät zuerst das Entsperren. Hinweis: Widgets zeigen Aufgabentitel auf dem Startbildschirm.
+- **Abmelden** löscht alles, was zu diesem Konto auf dem Gerät gespeichert ist: Zugangsdaten, Schlüssel, Offline-Daten (auch noch nicht übertragene Änderungen), Einstellungen, Hintergrundjobs und Benachrichtigungen.
 
-**Empfehlung:** In Nextcloud unter *Einstellungen → Sicherheit → Geräte & Sitzungen* ein eigenes App-Passwort erstellen. Es lässt sich jederzeit widerrufen und ist bei Zwei-Faktor-Anmeldung ohnehin nötig.
+## Grenzen
 
-## Grenzen dieser Version
-
-- Listen anlegen, umbenennen, löschen und teilen geht nur online.
-- Hintergrund-Synchronisierung: Android erlaubt höchstens alle 15 Minuten, der genaue Zeitpunkt kann sich zum Akkusparen verschieben. Benachrichtigungen über Änderungen anderer kommen deshalb nicht in Echtzeit (Nextcloud bietet für CalDAV kein Push).
+- Listen anlegen, umbenennen, teilen, löschen sowie Gruppen und Reihenfolge ändern geht nur online.
+- Leere Gruppen gibt es nur auf dem Gerät, auf dem sie angelegt wurden, bis die erste Liste hineingezogen wird.
+- Hintergrund-Synchronisierung: Android erlaubt höchstens alle 15 Minuten, der genaue Zeitpunkt kann sich zum Akkusparen verschieben. Nextcloud bietet für CalDAV kein Push, Benachrichtigungen über Änderungen anderer kommen deshalb nicht in Echtzeit.
 - Erinnerungen (VALARM) einzelner Aufgaben werden nicht angezeigt, bleiben aber erhalten; es gibt die tägliche Sammel-Erinnerung.
-- Wiederkehrende Aufgaben werden angezeigt, beim Abhaken aber wie in Nextcloud Tasks komplett erledigt.
-- Teilen funktioniert mit Nextcloud (oc:share-Erweiterung), nicht mit beliebigen CalDAV-Servern. Gruppen-Freigaben, die z. B. im Nextcloud-Web angelegt wurden, werden angezeigt und lassen sich entfernen.
-- Die Benutzersuche beachtet die Freigabe-Einstellungen des Servers; notfalls den Benutzernamen direkt eingeben.
+- Teilen funktioniert mit Nextcloud (oc:share-Erweiterung), nicht mit beliebigen CalDAV-Servern. Die Benutzersuche beachtet die Freigabe-Einstellungen des Servers.
 
-## Aufbau
+## Selbst bauen
+
+1. Projekt in Android Studio öffnen (*File → Open*), Gradle-Sync abwarten. Bei der Frage nach dem Gradle-JDK „Embedded JDK“ wählen.
+2. Direkt auf dem Handy starten (▶) oder *Build → Generate Signed App Bundle / APK → APK*.
+3. Unit-Tests unter `app/src/test/…` (Parser/Protokoll, Offline-Sync mit simuliertem Server, Konten-Speicher, Listengruppen): Rechtsklick → *Run*.
+
+### Aufbau
 
 ```
 app/src/main/java/de/devsmoms/nctodo/
-  ical/   iCalendar-Parser/Serializer, VTODO-Mapping
-  dav/    WebDAV/CalDAV-XML, HTTP-Client, Principal-Helfer
-  data/   CalDAV-Zugriff, Modelle, verschlüsselte Zugangsdaten + Offline-Speicher, Einstellungen
-  sync/   Offline-Sync-Engine (Warteschlange, Konfliktauflösung), WorkManager-Jobs, Benachrichtigungen
-  ui/     Compose-Oberfläche (Login, Listen, Details, Teilen)
+  ical/      iCalendar-Parser/Serializer, VTODO-Mapping, Wiederholungen
+  dav/       WebDAV/CalDAV-XML, HTTP-Client, Principal-Helfer
+  data/      CalDAV-Zugriff, Modelle, Konten, verschlüsselte Zugangsdaten und Offline-Speicher, Einstellungen
+  sync/      Offline-Sync-Engine (Warteschlange, Konfliktauflösung), WorkManager-Jobs, Benachrichtigungen
+  ui/        Compose-Oberfläche (Listen, Details, Teilen, Konten, Einstellungen, Papierkorb)
+  widget/    Startbildschirm-Widget (Glance)
+  quickadd/  Schnell-Anlegen und Schnelleinstellungs-Kachel
 ```
 
-## Release veröffentlichen (für Maintainer)
+### Release veröffentlichen (für Maintainer)
 
 1. In `app/build.gradle.kts` `versionCode` (+1) und `versionName` erhöhen, committen.
-2. Tag setzen und pushen, z. B. `git tag -a v2.0.3 -m "Version 2.0.3"` und `git push --follow-tags`.
+2. Tag setzen und pushen, z. B. `git tag -a v2.2.0 -m "Version 2.2.0"` und `git push origin v2.2.0`.
 3. Die GitHub Action „Release APK“ baut die signierte APK und hängt sie an das Release.
 
 Benötigte Repository-Secrets (*Settings → Secrets and variables → Actions*):
@@ -103,4 +129,4 @@ Die Veröffentlichung dieses Programms erfolgt in der Hoffnung, dass es Ihnen vo
 
 Den vollständigen Lizenztext finden Sie in der Datei [LICENSE](LICENSE).
 
-Die verwendeten Bibliotheken stehen unter Apache-2.0 bzw. BSD-3-Clause (Protocol Buffers in DataStore); beide sind mit der GPL-3.0 vereinbar. Details: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Die verwendeten Bibliotheken stehen unter Apache-2.0 bzw. BSD-3-Clause (Protocol Buffers in DataStore); beide sind mit der GPL v3 vereinbar. Details: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

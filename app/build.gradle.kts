@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 19
-        versionName = "2.5.1"
+        versionName = "2.2.0"
     }
 
     // Release signing comes from environment variables (GitHub Actions secrets or a local
