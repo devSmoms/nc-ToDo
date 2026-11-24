@@ -46,7 +46,8 @@ Android-App für die Aufgaben deiner Nextcloud (CalDAV/VTODO) – bedient sich �
 - **Papierkorb** (Nextcloud 22+): gelöschte Aufgaben und Listen wiederherstellen oder endgültig löschen
 - **Deck-Listen ausblenden**: Listen von Nextcloud Deck („Deck: …“) werden standardmäßig ausgeblendet
 
-### Teilen und Konten
+### Anmeldung, Teilen und Konten
+- **Anmeldung im Browser** (Nextcloud Login Flow v2): Adresse eingeben, im Browser bei der eigenen Nextcloud anmelden – auch mit Zwei-Faktor oder Single Sign-On – und „Zugriff gewähren“. Nextcloud erstellt dabei automatisch ein eigenes App-Passwort für NC Todo. Alternativ Benutzername und App-Passwort von Hand eingeben
 - Listen mit **Nextcloud-Benutzern** teilen: **Nur lesen** oder **Kann bearbeiten**, jederzeit änderbar
 - Mit dir geteilte Listen erscheinen automatisch (schreibgeschützte mit Schloss-Symbol) und lassen sich verlassen
 - **Mehrere Konten**, auch auf verschiedenen Servern: Tipp auf Avatar oder Namen oben im Menü → wechseln, hinzufügen, abmelden. Jedes Konto hat eigene Listen, Offline-Daten und Einstellungen
@@ -68,10 +69,24 @@ Fertige, signierte APKs gibt es unter **[Releases](../../releases)**. Installati
 
 Voraussetzungen: Android 8.0 oder neuer, Nextcloud mit gültigem HTTPS-Zertifikat (z. B. Let's Encrypt).
 
-**Tipp:** In Nextcloud unter *Einstellungen → Sicherheit → Geräte & Sitzungen* ein eigenes App-Passwort für NC Todo erstellen. Es lässt sich jederzeit widerrufen und ist bei Zwei-Faktor-Anmeldung ohnehin nötig.
+### Anmelden
+
+1. Adresse deiner Nextcloud eingeben (z. B. `cloud.example.de`) und auf **„Im Browser anmelden“** tippen.
+2. Im Browser wie gewohnt bei deiner Nextcloud anmelden – auch mit Zwei-Faktor oder Single Sign-On – und **„Zugriff gewähren“** tippen.
+3. Zurück in die App wechseln: Die Anmeldung wird automatisch abgeschlossen und deine Listen werden geladen.
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/login.png" width="220" alt="Adresse eingeben"><br><sub>1. Adresse eingeben</sub></td>
+    <td align="center"><img src="docs/screenshots/login-warten.png" width="220" alt="Warten auf die Freigabe im Browser"><br><sub>2. Im Browser „Zugriff gewähren“</sub></td>
+  </tr>
+</table>
+
+Dabei legt Nextcloud automatisch ein eigenes App-Passwort an. Es erscheint unter *Einstellungen → Sicherheit → Geräte & Sitzungen* als „NC Todo (Gerätename)“ und lässt sich dort jederzeit widerrufen. Wer lieber selbst ein App-Passwort erstellt, wählt „Stattdessen mit App-Passwort anmelden“.
 
 ## Sicherheit
 
+- **Anmeldung im Browser**: Das Kontopasswort gibst du nur auf der Seite deiner Nextcloud ein, die App sieht es nie. Die App nimmt das erzeugte App-Passwort nur von genau dem Server an, dessen Adresse du eingegeben hast (HTTPS, gleicher Host und Port).
 - **Zugangsdaten** werden mit AES-256-GCM verschlüsselt, mit einem eigenen Schlüssel pro Konto. Der Schlüssel liegt im Android Keystore (Hardware/StrongBox, falls vorhanden) und kann weder ausgelesen noch exportiert werden.
 - Der **Offline-Speicher** ist ebenfalls AES-256-GCM-verschlüsselt (eigener Keystore-Schlüssel) und liegt im privaten App-Speicher.
 - **Kein Backup**: `allowBackup=false` und Data-Extraction-Rules verhindern, dass Daten per Cloud-Backup oder Geräteumzug das Gerät verlassen.

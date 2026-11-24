@@ -29,6 +29,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import de.devsmoms.nctodo.data.LoginFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -84,6 +87,8 @@ data class UiState(
     val addingAccount: Boolean = false,
     val loginBusy: Boolean = false,
     val loginError: String? = null,
+    /** Browser login running: page the user has to open (null = no browser login in progress). */
+    val loginFlowUrl: String? = null,
     val syncing: Boolean = false,
     val offline: Boolean = false,
     val lastSync: Long? = null,
@@ -110,6 +115,8 @@ private data class LocalUi(
     val addingAccount: Boolean = false,
     val loginBusy: Boolean = false,
     val loginError: String? = null,
+    /** Browser login running: page the user has to open (null = no browser login in progress). */
+    val loginFlowUrl: String? = null,
     val selection: Selection = Selection.Smart(SmartList.MY_DAY),
     val screen: Screen = Screen.Main,
     val searchResults: List<PrincipalHit> = emptyList(),
@@ -182,6 +189,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             addingAccount = ui.addingAccount,
             loginBusy = ui.loginBusy,
             loginError = ui.loginError,
+            loginFlowUrl = ui.loginFlowUrl,
             syncing = view.status.running,
             offline = view.status.offline,
             lastSync = view.status.lastSuccess ?: data.lastSync,
@@ -228,9 +236,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private var loginFlowJob: Job? = null
+
+    /**
+     * Login Flow v2: opens the Nextcloud login page in the browser (via [UiState.loginFlowUrl])
+     * and waits until the user grants access; Nextcloud then creates an app password for NC Todo.
+     * Keeps waiting while the user is in the browser (the ViewModel survives that).
+     */
+    fun startBrowserLogin(server: String) {
+        if (server.isBlank()) {
+            local.update { it.copy(loginError = "Bitte die Adresse deiner Nextcloud eingeben") }
+            return
+        }
+        loginFlowJob?.cancel()
+        local.update { it.copy(loginBusy = true, loginError = null, loginFlowUrl = null) }
+        loginFlowJob = viewModelScope.launch {
+            try {
+                val flow = LoginFlow.start(server)
+                local.update { it.copy(loginFlowUrl = flow.loginUrl) }
+                val result = flow.await() ?: throw DavException("Die Anmeldung ist abgelaufen – bitte erneut starten")
+                local.update { it.copy(loginFlowUrl = null) }
+                c.login(result.server, result.loginName, result.appPassword)
+                resetForAccount()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                local.update { it.copy(loginBusy = false, loginFlowUrl = null, loginError = friendly(e)) }
+            }
+        }
+    }
+
+    fun cancelBrowserLogin() {
+        loginFlowJob?.cancel()
+        loginFlowJob = null
+        local.update { it.copy(loginBusy = false, loginFlowUrl = null) }
+    }
+
     /** Shows the login form on top of the current account. */
-    fun addAccount() = local.update { it.copy(addingAccount = true, loginBusy = false, loginError = null) }
-    fun cancelAddAccount() = local.update { it.copy(addingAccount = false, loginBusy = false, loginError = null) }
+    fun addAccount() = local.update { it.copy(addingAccount = true, loginBusy = false, loginError = null, loginFlowUrl = null) }
+    fun cancelAddAccount() {
+        cancelBrowserLogin()
+        local.update { it.copy(addingAccount = false, loginError = null) }
+    }
 
     fun switchAccount(id: String) {
         if (id == c.active.value?.id) return

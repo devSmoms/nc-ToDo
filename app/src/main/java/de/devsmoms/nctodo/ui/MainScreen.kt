@@ -153,7 +153,15 @@ fun AppRoot(vm: AppViewModel) {
             // "Konto hinzufügen" on top of an existing account can be cancelled.
             val cancel: (() -> Unit)? = if (state.credentials != null) vm::cancelAddAccount else null
             if (cancel != null) BackHandler { cancel() }
-            LoginScreen(state.loginBusy, state.loginError, onCancel = cancel, onLogin = vm::login)
+            LoginScreen(
+                busy = state.loginBusy,
+                error = state.loginError,
+                flowUrl = state.loginFlowUrl,
+                onCancel = cancel,
+                onBrowserLogin = vm::startBrowserLogin,
+                onCancelBrowserLogin = vm::cancelBrowserLogin,
+                onLogin = vm::login,
+            )
         }
         else -> when (val s = state.screen) {
             is Screen.Main -> MainScreen(state, vm, snackbar)
