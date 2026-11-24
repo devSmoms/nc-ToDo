@@ -35,7 +35,7 @@ Android-App für die Aufgaben deiner Nextcloud (CalDAV/VTODO) – bedient sich �
 - Eigene Listen anlegen, umbenennen, einfärben, löschen; optionale **Listenbeschreibung**
 - **Listen-Symbole**: 29 einfarbige Icons in der Listenfarbe. Gespeichert als Emoji am Anfang des Namens (z. B. „🛒 Einkauf“) und dadurch per CalDAV synchronisiert
 - **Listengruppen**: auf- und zuklappbare Gruppen im Menü. Neue Gruppe über das Ordner-Symbol neben „Neue Liste“
-- **Reihenfolge per Drag & Drop**: Liste im Menü gedrückt halten und an eine andere Stelle oder in eine Gruppe ziehen; bei langen Menüs scrollt es automatisch mit. Gruppe und Position werden als eigene WebDAV-Eigenschaften gespeichert – Listennamen bleiben in Nextcloud unverändert, andere Apps ignorieren sie
+- **Reihenfolge per Drag & Drop**: Liste im Menü gedrückt halten und an eine andere Stelle oder in eine Gruppe ziehen; ebenso einen Gruppenkopf, um die ganze Gruppe zu verschieben; bei langen Menüs scrollt es automatisch mit. Gruppe und Position werden als eigene WebDAV-Eigenschaften gespeichert – Listennamen bleiben in Nextcloud unverändert, andere Apps ignorieren sie
 - Aufgaben: abhaken, Stern, Notizen, „Zu Mein Tag hinzufügen“, **Schritte** (Unteraufgaben, kompatibel mit Nextcloud Tasks)
 - **Fälligkeit mit Uhrzeit** oder ganztägig (Standard einstellbar)
 - **Wiederholung**: täglich, werktags, wöchentlich, monatlich, jährlich oder „alle N Tage/Wochen/Monate/Jahre“. Beim Abhaken springt die Aufgabe auf den nächsten Termin, Schritte werden zurückgesetzt und ein erledigter Eintrag bleibt als Verlauf

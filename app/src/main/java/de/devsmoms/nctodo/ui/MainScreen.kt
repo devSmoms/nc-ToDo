@@ -624,8 +624,16 @@ private fun Drawer(
         val fromIdx = current.indexOfFirst { it.key == from.key }
         val toIdx = current.indexOfFirst { it.key == to.key }
         if (fromIdx >= 0 && toIdx >= 0 && fromIdx != toIdx) {
-            dragRows = current.toMutableList().apply { add(toIdx, removeAt(fromIdx)) }
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            val moved = if (current[fromIdx] is DrawerRow.Header) {
+                // A group header carries its whole group along.
+                moveGroup(current, from.key.toString(), to.key.toString())
+            } else {
+                current.toMutableList().apply { add(toIdx, removeAt(fromIdx)) }
+            }
+            if (moved != null) {
+                dragRows = moved
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            }
         }
     }
     fun finishDrag() {
@@ -680,17 +688,33 @@ private fun Drawer(
                         is DrawerRow.Header -> {
                             val members = members[row.name].orEmpty()
                             val collapsed = row.name in settings.collapsedGroups
-                            GroupHeader(
-                                name = row.name,
-                                openCount = members.sumOf { openCount(state, it) },
-                                collapsed = collapsed,
-                                empty = members.isEmpty(),
-                                containsSelection = members.any { state.selection == Selection.OfList(it.url) },
-                                onToggle = { onGroupAction(GroupAction.Toggle(row.name)) },
-                                onNewList = { onGroupAction(GroupAction.NewList(row.name)) },
-                                onRename = { onGroupAction(GroupAction.Rename(row.name)) },
-                                onDissolve = { onGroupAction(GroupAction.Dissolve(row.name)) },
-                            )
+                            val interaction = remember { MutableInteractionSource() }
+                            val elevation by animateDpAsState(if (isDragging) 6.dp else 0.dp, label = "dragGroup")
+                            Surface(
+                                shape = RoundedCornerShape(28.dp),
+                                shadowElevation = elevation,
+                                color = if (isDragging) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
+                                modifier = Modifier.padding(horizontal = if (isDragging) 8.dp else 0.dp),
+                            ) {
+                                GroupHeader(
+                                    name = row.name,
+                                    openCount = members.sumOf { openCount(state, it) },
+                                    collapsed = collapsed,
+                                    empty = members.isEmpty(),
+                                    containsSelection = members.any { state.selection == Selection.OfList(it.url) },
+                                    onToggle = { onGroupAction(GroupAction.Toggle(row.name)) },
+                                    onNewList = { onGroupAction(GroupAction.NewList(row.name)) },
+                                    onRename = { onGroupAction(GroupAction.Rename(row.name)) },
+                                    onDissolve = { onGroupAction(GroupAction.Dissolve(row.name)) },
+                                    // Long press drags the whole group; a tap still opens or closes it.
+                                    modifier = Modifier.longPressDraggableHandle(
+                                        interactionSource = interaction,
+                                        onDragStarted = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+                                        onDragStopped = { finishDrag() },
+                                    ),
+                                    interactionSource = interaction,
+                                )
+                            }
                         }
                         is DrawerRow.Item -> {
                             val interaction = remember { MutableInteractionSource() }

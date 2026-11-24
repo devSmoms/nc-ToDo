@@ -37,6 +37,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.ripple
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -102,6 +104,24 @@ fun arrangementOf(rows: List<DrawerRow>, lists: List<TaskList>, collapsed: Set<S
     }
 }
 
+/**
+ * Moves a whole group (header plus its lists) while its header is dragged. [toKey] may be any
+ * row of another group; the dragged group then takes that group's place. Ungrouped lists always
+ * stay above the groups, so targets among them are ignored (returns null = no change).
+ */
+fun moveGroup(rows: List<DrawerRow>, fromKey: String, toKey: String): List<DrawerRow>? {
+    val blocks = mutableListOf(mutableListOf<DrawerRow>())
+    rows.forEach { r -> if (r is DrawerRow.Header) blocks.add(mutableListOf(r)) else blocks.last().add(r) }
+    val ungrouped = blocks.removeAt(0)
+    val from = blocks.indexOfFirst { it.first().key == fromKey }
+    val to = blocks.indexOfFirst { block -> block.any { it.key == toKey } }
+    if (from < 0 || to < 0 || from == to) return null
+    // After removing the dragged block, inserting at the target index puts it after the target
+    // when moving down and before it when moving up.
+    blocks.add(to, blocks.removeAt(from))
+    return ungrouped + blocks.flatten()
+}
+
 /** Group header in the menu: tap toggles, ⋮ offers new list, rename and dissolve. */
 @Composable
 fun GroupHeader(
@@ -114,14 +134,17 @@ fun GroupHeader(
     onNewList: () -> Unit,
     onRename: () -> Unit,
     onDissolve: () -> Unit,
+    modifier: Modifier = Modifier,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     // A collapsed group hiding the open list is highlighted so the selection never "disappears".
     val tint = if (collapsed && containsSelection) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(28.dp))
-            .clickable(onClick = onToggle).heightIn(min = 52.dp).padding(start = 16.dp, end = 4.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(28.dp))
+            .clickable(interactionSource = interactionSource, indication = ripple(), onClick = onToggle)
+            .heightIn(min = 52.dp).padding(start = 16.dp, end = 4.dp),
     ) {
         Icon(if (collapsed) Icons.Outlined.Folder else Icons.Outlined.FolderOpen, null, tint = tint)
         Spacer(Modifier.width(12.dp))
