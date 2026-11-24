@@ -26,7 +26,7 @@ fun tasksForSelection(
     return when (selection) {
         is Selection.OfList -> topLevel
         is Selection.Smart -> when (selection.kind) {
-            SmartList.MY_DAY -> topLevel.filter { it.todo.due != null && !it.todo.due.isAfter(today) && !it.todo.completed }
+            SmartList.MY_DAY -> topLevel.filter { t -> t.todo.due?.let { !it.isAfter(today) } == true && !t.todo.completed }
             SmartList.IMPORTANT -> topLevel.filter { it.todo.starred && !it.todo.completed }
             SmartList.PLANNED -> topLevel.filter { it.todo.due != null && !it.todo.completed }
             SmartList.ALL -> topLevel

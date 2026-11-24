@@ -252,7 +252,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         local.update { it.copy(loginBusy = true, loginError = null, loginFlowUrl = null) }
         loginFlowJob = viewModelScope.launch {
             try {
-                val flow = LoginFlow.start(server)
+                val flow = LoginFlow.start(server, "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
                 local.update { it.copy(loginFlowUrl = flow.loginUrl) }
                 val result = flow.await() ?: throw DavException("Die Anmeldung ist abgelaufen – bitte erneut starten")
                 local.update { it.copy(loginFlowUrl = null) }

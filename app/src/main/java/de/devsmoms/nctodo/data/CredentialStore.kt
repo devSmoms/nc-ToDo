@@ -4,15 +4,6 @@ import android.content.Context
 import android.util.Base64
 import org.json.JSONObject
 
-data class Credentials(
-    val serverUrl: String,
-    val username: String,
-    val password: String,
-    val principalUrl: String,
-    val calendarHomeUrl: String,
-    val displayName: String,
-)
-
 /**
  * Stores the login encrypted with AES-256-GCM. The key lives in the Android Keystore
  * (hardware-backed / StrongBox where available) and can never be exported, so the

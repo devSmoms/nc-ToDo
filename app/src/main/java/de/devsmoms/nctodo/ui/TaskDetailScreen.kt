@@ -197,7 +197,7 @@ fun TaskDetailScreen(state: UiState, item: TaskItem, vm: AppViewModel, snackbar:
             Surface(shape = RoundedCornerShape(8.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Column {
                     val today = LocalDate.now()
-                    val inMyDay = t.due != null && !t.due.isAfter(today)
+                    val inMyDay = t.due?.let { !it.isAfter(today) } == true
                     DetailRow(
                         icon = { Icon(Icons.Outlined.WbSunny, null, tint = if (inMyDay) accent else MaterialTheme.colorScheme.onSurfaceVariant) },
                         text = if (inMyDay) "In „Mein Tag“" else "Zu „Mein Tag“ hinzufügen",

@@ -110,19 +110,22 @@ Dabei legt Nextcloud automatisch ein eigenes App-Passwort an. Es erscheint unter
 
 1. Projekt in Android Studio öffnen (*File → Open*), Gradle-Sync abwarten. Bei der Frage nach dem Gradle-JDK „Embedded JDK“ wählen.
 2. Direkt auf dem Handy starten (▶) oder *Build → Generate Signed App Bundle / APK → APK*.
-3. Unit-Tests unter `app/src/test/…` (Parser/Protokoll, Offline-Sync mit simuliertem Server, Konten-Speicher, Listengruppen): Rechtsklick → *Run*.
+3. Unit-Tests liegen in `core/src/test/…` (Parser/Protokoll, Offline-Sync mit simuliertem Server, Konten-Speicher, Listengruppen, Login): Rechtsklick → *Run* oder `gradlew :core:test`.
 
 ### Aufbau
 
 ```
-app/src/main/java/de/devsmoms/nctodo/
-  ical/      iCalendar-Parser/Serializer, VTODO-Mapping, Wiederholungen
-  dav/       WebDAV/CalDAV-XML, HTTP-Client, Principal-Helfer
-  data/      CalDAV-Zugriff, Modelle, Konten, verschlüsselte Zugangsdaten und Offline-Speicher, Einstellungen
-  sync/      Offline-Sync-Engine (Warteschlange, Konfliktauflösung), WorkManager-Jobs, Benachrichtigungen
-  ui/        Compose-Oberfläche (Listen, Details, Teilen, Konten, Einstellungen, Papierkorb)
-  widget/    Startbildschirm-Widget (Glance)
-  quickadd/  Schnell-Anlegen und Schnelleinstellungs-Kachel
+core/      gemeinsamer Code ohne Android – läuft auch auf dem Desktop
+  ical/    iCalendar-Parser/Serializer, VTODO-Mapping, Wiederholungen
+  dav/     WebDAV/CalDAV-XML, HTTP-Client, Principal-Helfer
+  data/    CalDAV-Zugriff, Modelle, Login Flow v2, Konten-Speichernamen
+  sync/    Offline-Sync-Engine (Warteschlange, Konfliktauflösung)
+app/       Android-App
+  data/    verschlüsselte Zugangsdaten und Offline-Speicher (Android Keystore), Einstellungen
+  sync/    WorkManager-Jobs, Benachrichtigungen
+  ui/      Compose-Oberfläche (Listen, Details, Teilen, Konten, Einstellungen, Papierkorb)
+  widget/  Startbildschirm-Widget (Glance)
+  quickadd/ Schnell-Anlegen und Schnelleinstellungs-Kachel
 ```
 
 ### Release veröffentlichen (für Maintainer)
