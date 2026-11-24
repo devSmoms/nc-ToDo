@@ -110,8 +110,8 @@ class SyncTest {
     @Test
     fun arrangingListsSendsOnlyChanges() = runBlocking {
         val (remote, repo, _) = setup()
-        remote.addList("https://cloud.example.de/remote.php/dav/calendars/simon/b/", "B")
-        remote.addList("https://cloud.example.de/remote.php/dav/calendars/simon/c/", "C")
+        remote.addList("https://cloud.example.de/remote.php/dav/calendars/alice/b/", "B")
+        remote.addList("https://cloud.example.de/remote.php/dav/calendars/alice/c/", "C")
         repo.sync()
         val urls = repo.data.value.lists.map { it.url }
         assertEquals(3, urls.size)
