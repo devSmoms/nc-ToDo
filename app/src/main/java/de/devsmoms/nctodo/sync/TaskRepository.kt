@@ -174,8 +174,30 @@ class TaskRepository(
     /** Moves lists into [group] (null = no group); online only, like all list settings. */
     suspend fun setListGroup(lists: List<TaskList>, group: String?) {
         val remote = remoteOrThrow()
-        lists.forEach { remote.setListGroup(it, group?.trim()?.takeIf { g -> g.isNotEmpty() }) }
+        lists.forEach { remote.setListMeta(it, group?.trim()?.takeIf { g -> g.isNotEmpty() }, null) }
         sync()
+    }
+
+    /**
+     * New menu arrangement after drag and drop: every list with its group, in display order.
+     * Shown immediately; only lists whose group or position changed are sent to the server.
+     * If that fails, the following sync restores the server's arrangement.
+     */
+    suspend fun arrangeLists(arrangement: List<Pair<String, String?>>) {
+        val remote = remoteOrThrow()
+        val wanted = arrangement.mapIndexed { i, (url, group) -> url to (group to (i + 1) * ORDER_STEP) }.toMap()
+        val before = _data.value.lists
+        mutate(notify = false) { d ->
+            d.copy(lists = d.lists.map { l -> wanted[l.url]?.let { (g, o) -> l.copy(group = g, order = o) } ?: l })
+        }
+        try {
+            before.forEach { l ->
+                val (g, o) = wanted[l.url] ?: return@forEach
+                if (l.group != g || l.order != o) remote.setListMeta(l, g, o)
+            }
+        } finally {
+            sync()
+        }
     }
 
     suspend fun deleteList(list: TaskList) {
@@ -401,3 +423,6 @@ class TaskRepository(
             if (this[url]?.rev == rev) this - url else this
     }
 }
+
+/** Gap between list positions; leaves room without renumbering everything. */
+private const val ORDER_STEP = 10

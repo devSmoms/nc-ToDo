@@ -91,6 +91,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.delay
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -172,6 +181,7 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
     var accountDialog by remember { mutableStateOf(false) }
     var groupPicker by remember { mutableStateOf<TaskList?>(null) }
     var renameGroup by remember { mutableStateOf<String?>(null) }
+    var newGroup by remember { mutableStateOf(false) }
     var dissolveGroup by remember { mutableStateOf<String?>(null) }
 
     val sel = state.selection
@@ -204,7 +214,7 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
                     is GroupAction.Rename -> renameGroup = action.name
                     is GroupAction.Dissolve -> dissolveGroup = action.name
                 }
-            })
+            }, onNewGroup = { newGroup = true }, onArrange = vm::arrangeLists)
         },
     ) {
         Scaffold(
@@ -275,7 +285,7 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
         GroupPickerDialog(
             listName = ListIcons.label(list.name),
             current = list.group,
-            groups = groupedLists(state.lists).second.map { it.first },
+            groups = groupedLists(state.lists, state.settings.emptyGroups).second.map { it.first },
             onDismiss = { groupPicker = null },
         ) { group ->
             groupPicker = null
@@ -283,9 +293,15 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
         }
     }
     renameGroup?.let { name ->
-        RenameGroupDialog(name, onDismiss = { renameGroup = null }) { new ->
+        GroupNameDialog(name, onDismiss = { renameGroup = null }) { new ->
             renameGroup = null
             vm.renameGroup(name, new)
+        }
+    }
+    if (newGroup) {
+        GroupNameDialog("", onDismiss = { newGroup = false }) { name ->
+            newGroup = false
+            vm.createGroup(name)
         }
     }
     dissolveGroup?.let { name ->
@@ -570,9 +586,58 @@ private fun Drawer(
     onTrash: () -> Unit,
     onAccounts: () -> Unit,
     onGroupAction: (GroupAction) -> Unit,
+    onNewGroup: () -> Unit,
+    onArrange: (List<Pair<String, String?>>) -> Unit,
 ) {
     fun count(kind: SmartList) = visibleTasks(state.copy(selection = Selection.Smart(kind))).count { !it.todo.completed }
     val listState = rememberLazyListState()
+    val settings = state.settings
+    val haptic = LocalHapticFeedback.current
+
+    // Rows as stored; while dragging, [dragRows] holds the live order instead.
+    val baseRows = remember(state.lists, settings.emptyGroups, settings.collapsedGroups) {
+        drawerRows(state.lists, settings.emptyGroups, settings.collapsedGroups)
+    }
+    val members = remember(state.lists, settings.emptyGroups) { groupedLists(state.lists, settings.emptyGroups).second.toMap() }
+    var dragRows by remember { mutableStateOf<List<DrawerRow>?>(null) }
+    var dropped by remember { mutableStateOf(false) }
+    val rows = dragRows ?: baseRows
+    val inGroup = remember(rows) {
+        var seenHeader = false
+        rows.map { row -> if (row is DrawerRow.Header) seenHeader = true; seenHeader }
+    }
+    // Keep the dropped order until the new arrangement arrives (or give up after a moment, e.g. offline).
+    LaunchedEffect(baseRows, dropped) {
+        if (dropped) {
+            if (dragRows?.map { it.key } == baseRows.map { it.key }) {
+                dragRows = null
+                dropped = false
+            } else {
+                delay(2000)
+                dragRows = null
+                dropped = false
+            }
+        }
+    }
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        val current = dragRows ?: baseRows
+        val fromIdx = current.indexOfFirst { it.key == from.key }
+        val toIdx = current.indexOfFirst { it.key == to.key }
+        if (fromIdx >= 0 && toIdx >= 0 && fromIdx != toIdx) {
+            dragRows = current.toMutableList().apply { add(toIdx, removeAt(fromIdx)) }
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
+    fun finishDrag() {
+        val final = dragRows ?: return
+        val arrangement = arrangementOf(final, state.lists, settings.collapsedGroups)
+        if (arrangement == arrangementOf(baseRows, state.lists, settings.collapsedGroups)) {
+            dragRows = null
+            return
+        }
+        dropped = true
+        onArrange(arrangement)
+    }
     // Account header (top) and trash (bottom) stay pinned; only the lists in between scroll.
     ModalDrawerSheet {
         Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -609,33 +674,61 @@ private fun Drawer(
                 DrawerEntry(kind.title, icon, tint, count(kind), state.selection == Selection.Smart(kind)) { onSelect(Selection.Smart(kind)) }
             }
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp, horizontal = 16.dp)) }
-            val (ungrouped, groups) = groupedLists(state.lists)
-            items(ungrouped, key = { it.url }) { list -> DrawerListEntry(state, list, onSelect) }
-            groups.forEach { (name, lists) ->
-                val collapsed = name in state.settings.collapsedGroups
-                item(key = "group:$name") {
-                    GroupHeader(
-                        name = name,
-                        openCount = lists.sumOf { openCount(state, it) },
-                        collapsed = collapsed,
-                        containsSelection = lists.any { state.selection == Selection.OfList(it.url) },
-                        onToggle = { onGroupAction(GroupAction.Toggle(name)) },
-                        onNewList = { onGroupAction(GroupAction.NewList(name)) },
-                        onRename = { onGroupAction(GroupAction.Rename(name)) },
-                        onDissolve = { onGroupAction(GroupAction.Dissolve(name)) },
-                    )
-                }
-                if (!collapsed) {
-                    items(lists, key = { it.url }) { list -> GroupedEntry { DrawerListEntry(state, list, onSelect) } }
+            itemsIndexed(rows, key = { _, row -> row.key }) { index, row ->
+                ReorderableItem(reorderState, key = row.key) { isDragging ->
+                    when (row) {
+                        is DrawerRow.Header -> {
+                            val members = members[row.name].orEmpty()
+                            val collapsed = row.name in settings.collapsedGroups
+                            GroupHeader(
+                                name = row.name,
+                                openCount = members.sumOf { openCount(state, it) },
+                                collapsed = collapsed,
+                                empty = members.isEmpty(),
+                                containsSelection = members.any { state.selection == Selection.OfList(it.url) },
+                                onToggle = { onGroupAction(GroupAction.Toggle(row.name)) },
+                                onNewList = { onGroupAction(GroupAction.NewList(row.name)) },
+                                onRename = { onGroupAction(GroupAction.Rename(row.name)) },
+                                onDissolve = { onGroupAction(GroupAction.Dissolve(row.name)) },
+                            )
+                        }
+                        is DrawerRow.Item -> {
+                            val interaction = remember { MutableInteractionSource() }
+                            // Long press anywhere on the row starts dragging; a normal tap still opens the list.
+                            val handle = Modifier.longPressDraggableHandle(
+                                interactionSource = interaction,
+                                onDragStarted = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+                                onDragStopped = { finishDrag() },
+                            )
+                            val elevation by animateDpAsState(if (isDragging) 6.dp else 0.dp, label = "drag")
+                            val entry = @Composable {
+                                Surface(
+                                    shape = RoundedCornerShape(28.dp),
+                                    shadowElevation = elevation,
+                                    color = if (isDragging) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
+                                    modifier = Modifier.padding(horizontal = if (isDragging) 8.dp else 0.dp),
+                                ) {
+                                    DrawerListEntry(state, row.list, onSelect, interaction, handle)
+                                }
+                            }
+                            // Indentation follows the live position, so dropping into a group is visible while dragging.
+                            if (inGroup[index]) GroupedEntry(entry) else entry()
+                        }
+                    }
                 }
             }
             item {
-                NavigationDrawerItem(
-                    label = { Text("Neue Liste") },
-                    icon = { Icon(Icons.Outlined.Add, null) },
-                    selected = false, onClick = onNewList,
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
+                    NavigationDrawerItem(
+                        label = { Text("Neue Liste") },
+                        icon = { Icon(Icons.Outlined.Add, null) },
+                        selected = false, onClick = onNewList,
+                        modifier = Modifier.weight(1f).padding(start = 12.dp),
+                    )
+                    IconButton(onClick = onNewGroup) {
+                        Icon(Icons.Outlined.CreateNewFolder, "Neue Gruppe", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
             }
         }
@@ -663,7 +756,13 @@ sealed interface GroupAction {
 }
 
 @Composable
-private fun DrawerListEntry(state: UiState, list: TaskList, onSelect: (Selection) -> Unit) {
+private fun DrawerListEntry(
+    state: UiState,
+    list: TaskList,
+    onSelect: (Selection) -> Unit,
+    interactionSource: MutableInteractionSource? = null,
+    modifier: Modifier = Modifier,
+) {
     val status = when {
         !list.isOwner && !list.canWrite -> Icons.Outlined.Lock
         !list.isOwner || list.shares.isNotEmpty() -> Icons.Outlined.People
@@ -674,6 +773,7 @@ private fun DrawerListEntry(state: UiState, list: TaskList, onSelect: (Selection
     DrawerEntry(
         ListIcons.label(list.name), custom ?: status ?: ListIcons.DEFAULT, parseColor(list.color), openCount(state, list),
         state.selection == Selection.OfList(list.url), statusIcon = if (custom != null) status else null,
+        interactionSource = interactionSource, modifier = modifier,
     ) {
         onSelect(Selection.OfList(list.url))
     }
@@ -696,6 +796,8 @@ private fun DrawerEntry(
     count: Int,
     selected: Boolean,
     statusIcon: ImageVector? = null,
+    interactionSource: MutableInteractionSource? = null,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     NavigationDrawerItem(
@@ -711,6 +813,7 @@ private fun DrawerEntry(
         icon = { Icon(icon, null, tint = tint) },
         badge = { if (count > 0) Text(count.toString()) },
         selected = selected, onClick = onClick,
-        modifier = Modifier.padding(horizontal = 12.dp),
+        modifier = modifier.padding(horizontal = 12.dp),
+        interactionSource = interactionSource,
     )
 }

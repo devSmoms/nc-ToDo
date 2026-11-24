@@ -122,6 +122,7 @@ private val LIBRARIES = listOf(
     "WorkManager",
     "Kotlin & kotlinx.coroutines",
     "OkHttp & Okio",
+    "Reorderable (Calvin Liang)",
 )
 
 /** Same accent colors as the smart lists in the drawer. */

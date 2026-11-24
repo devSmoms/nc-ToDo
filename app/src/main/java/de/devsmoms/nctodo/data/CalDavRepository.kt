@@ -38,6 +38,7 @@ class CalDavRepository(private val creds: Credentials) : Remote {
                     ctag = r.text(Ns.CS, "getctag"),
                     description = r.text(Ns.CALDAV, "calendar-description"),
                     group = r.text(Ns.NCTODO, "group")?.take(MAX_GROUP_LENGTH),
+                    order = r.text(Ns.NCTODO, "order")?.toIntOrNull(),
                     ownerPrincipal = ownerHref?.let { h -> h.substringAfter("principals/", "").takeIf { it.isNotEmpty() }?.let { "principal:principals/" + it.trimEnd('/') } },
                 )
             }
@@ -54,11 +55,11 @@ class CalDavRepository(private val creds: Credentials) : Remote {
         client.proppatch(list.url, DavXml.proppatch(name.trim(), color, description.trim()))
     }
 
-    override suspend fun setListGroup(list: TaskList, group: String?) {
-        val res = client.proppatch(list.url, DavXml.setGroup(group))
+    override suspend fun setListMeta(list: TaskList, group: String?, order: Int?) {
+        val res = client.proppatch(list.url, DavXml.setListMeta(group, order))
         // PROPPATCH answers 207 even when a property is refused: check the property's own status.
         val ok = runCatching { DavXml.parseMultistatus(res.body, list.url) }.getOrNull()
-            ?.any { it.prop(Ns.NCTODO, "group") != null } ?: true
+            ?.any { it.prop(Ns.NCTODO, "group") != null || it.prop(Ns.NCTODO, "order") != null } ?: true
         if (!ok) throw DavException("Der Server speichert keine Listengruppen")
     }
 

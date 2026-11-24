@@ -8,7 +8,8 @@ Android-App für Nextcloud-Aufgaben (CalDAV/VTODO), bedient sich ähnlich wie Mi
 - **Mehrere Konten**, auch auf verschiedenen Servern: Tipp auf Avatar oder Namen oben im Menü öffnet die Kontoauswahl (wechseln, hinzufügen, abmelden). Jedes Konto hat eigene Listen, Offline-Daten und Einstellungen. Beim Abmelden werden alle Daten dieses Kontos vom Gerät gelöscht. Widgets zeigen ein wählbares Konto, das Schnell-Anlegen bietet die Listen aller Konten an.
 - Intelligente Listen: **Mein Tag** (heute fällig oder überfällig), **Wichtig** (Stern), **Geplant** (mit Fälligkeitsdatum), **Aufgaben** (alle)
 - Eigene Listen anlegen, umbenennen, einfärben, löschen
-- **Listengruppen**: Listen im Menü in auf- und zuklappbare Gruppen sortieren (z. B. „Arbeit“, „Familie“). Die Gruppe wird als eigene WebDAV-Eigenschaft am Kalender gespeichert, Namen bleiben in Nextcloud unverändert, andere Apps ignorieren sie. Bei geteilten Listen hat jeder Benutzer seine eigene Gruppierung.
+- **Listengruppen**: Listen im Menü in auf- und zuklappbare Gruppen sortieren (z. B. „Arbeit“, „Familie“). Die Gruppe wird als eigene WebDAV-Eigenschaft am Kalender gespeichert, Namen bleiben in Nextcloud unverändert, andere Apps ignorieren sie. Neue Gruppen über das Ordner-Symbol neben „Neue Liste“.
+- **Reihenfolge per Drag & Drop**: Liste im Menü gedrückt halten und an eine andere Stelle oder in eine Gruppe ziehen; bei langen Menüs scrollt es automatisch mit. Die Position wird ebenfalls als WebDAV-Eigenschaft gespeichert.
 - Listen teilen mit **Nextcloud-Benutzern** des eigenen Servers: **Nur lesen** oder **Kann bearbeiten**, umschaltbar, entfernbar
 - Mit dir geteilte Listen werden angezeigt (schreibgeschützte mit Schloss-Symbol), du kannst sie auch verlassen
 - Aufgaben: abhaken, Stern, Fälligkeitsdatum, „Zu Mein Tag hinzufügen“, Notizen, **Schritte** (Unteraufgaben, kompatibel mit Nextcloud Tasks)

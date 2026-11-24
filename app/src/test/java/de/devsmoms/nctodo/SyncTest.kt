@@ -73,9 +73,11 @@ class FakeRemote : Remote {
     }
     override suspend fun createList(name: String, color: String, description: String) = error("unused")
     override suspend fun updateList(list: TaskList, name: String, color: String, description: String) = error("unused")
-    override suspend fun setListGroup(list: TaskList, group: String?) {
+    var metaCalls = 0
+    override suspend fun setListMeta(list: TaskList, group: String?, order: Int?) {
+        metaCalls++
         val idx = lists.indexOfFirst { it.url == list.url }
-        lists[idx] = lists[idx].copy(group = group)
+        lists[idx] = lists[idx].copy(group = group, order = order ?: lists[idx].order)
     }
     override suspend fun deleteList(list: TaskList) = error("unused")
     override suspend fun share(list: TaskList, principal: String, canWrite: Boolean) = error("unused")
@@ -103,6 +105,29 @@ class SyncTest {
         val repo = TaskRepository(store, { remote })
         runBlocking { repo.sync() }
         return Triple(remote, repo, store)
+    }
+
+    @Test
+    fun arrangingListsSendsOnlyChanges() = runBlocking {
+        val (remote, repo, _) = setup()
+        remote.addList("https://cloud.example.de/remote.php/dav/calendars/simon/b/", "B")
+        remote.addList("https://cloud.example.de/remote.php/dav/calendars/simon/c/", "C")
+        repo.sync()
+        val urls = repo.data.value.lists.map { it.url }
+        assertEquals(3, urls.size)
+        // First arrangement: everything gets a position, two lists move into a group.
+        repo.arrangeLists(listOf(urls[2] to null, urls[0] to "Arbeit", urls[1] to "Arbeit"))
+        assertEquals(3, remote.metaCalls)
+        val byUrl = remote.lists.associateBy { it.url }
+        assertEquals(null, byUrl.getValue(urls[2]).group)
+        assertEquals("Arbeit", byUrl.getValue(urls[0]).group)
+        assertTrue(byUrl.getValue(urls[2]).order!! < byUrl.getValue(urls[0]).order!!)
+        assertTrue(byUrl.getValue(urls[0]).order!! < byUrl.getValue(urls[1]).order!!)
+        // Swapping the two grouped lists only touches those two.
+        remote.metaCalls = 0
+        repo.arrangeLists(listOf(urls[2] to null, urls[1] to "Arbeit", urls[0] to "Arbeit"))
+        assertEquals(2, remote.metaCalls)
+        assertEquals(listOf(urls[2], urls[1], urls[0]), repo.data.value.lists.sortedBy { it.order }.map { it.url })
     }
 
     @Test

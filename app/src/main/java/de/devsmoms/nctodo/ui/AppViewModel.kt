@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.devsmoms.nctodo.AccountSession
 import de.devsmoms.nctodo.NcTodoApp
+import de.devsmoms.nctodo.data.CalDavRepository
 import de.devsmoms.nctodo.data.Credentials
 import de.devsmoms.nctodo.data.PrincipalHit
 import de.devsmoms.nctodo.data.Settings
@@ -454,19 +455,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         message(if (g == null) "Aus der Gruppe entfernt" else "In „$g“ verschoben")
     }
 
+    /**
+     * Creates an empty group. Groups exist on the server only through their lists, so an
+     * empty group is kept on this device until the first list is dragged into it.
+     */
+    fun createGroup(name: String) {
+        val g = name.trim().take(CalDavRepository.MAX_GROUP_LENGTH)
+        if (g.isEmpty()) return
+        if (state.value.lists.any { it.group == g } || g in state.value.settings.emptyGroups) {
+            message("Die Gruppe „$g“ gibt es schon")
+            return
+        }
+        updateSettings { s -> s.copy(emptyGroups = s.emptyGroups + g, collapsedGroups = s.collapsedGroups - g) }
+        message("Gruppe „$g“ erstellt – Listen gedrückt halten und hineinziehen")
+    }
+
     /** Renames a group by moving all its lists; merges into an existing group of that name. */
     fun renameGroup(old: String, new: String) = launchSafe {
         val target = new.trim()
         if (target.isEmpty() || target == old) return@launchSafe
         repo.setListGroup(state.value.lists.filter { it.group == old }, target)
-        updateSettings { s -> s.copy(collapsedGroups = s.collapsedGroups.map { if (it == old) target else it }.toSet()) }
+        updateSettings { s ->
+            s.copy(
+                collapsedGroups = s.collapsedGroups.map { if (it == old) target else it }.toSet(),
+                emptyGroups = if (old in s.emptyGroups) s.emptyGroups - old + target else s.emptyGroups,
+            )
+        }
     }
 
     /** Dissolves a group; its lists stay and appear ungrouped. */
     fun dissolveGroup(group: String) = launchSafe {
-        repo.setListGroup(state.value.lists.filter { it.group == group }, null)
-        updateSettings { s -> s.copy(collapsedGroups = s.collapsedGroups - group) }
+        updateSettings { s -> s.copy(collapsedGroups = s.collapsedGroups - group, emptyGroups = s.emptyGroups - group) }
+        val members = state.value.lists.filter { it.group == group }
+        if (members.isNotEmpty()) repo.setListGroup(members, null)
         message("Gruppe „$group“ aufgelöst")
+    }
+
+    /** Result of drag and drop in the menu: all lists in their new order with their group. */
+    fun arrangeLists(arrangement: List<Pair<String, String?>>) = launchSafe {
+        // Groups that received their first list are no longer "empty".
+        val filled = arrangement.mapNotNull { it.second }.toSet()
+        updateSettings { s -> s.copy(emptyGroups = s.emptyGroups - filled) }
+        repo.arrangeLists(arrangement)
     }
 
     fun toggleGroup(group: String) = updateSettings { s ->

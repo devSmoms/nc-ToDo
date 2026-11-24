@@ -12,12 +12,18 @@ class ListGroupTest {
 
     @Test
     fun setGroupEscapesAndRemoves() {
-        val set = DavXml.setGroup("  Familie & <Freunde>  ")
+        val set = DavXml.setListMeta("  Familie & <Freunde>  ", 30)
         assertTrue("<n:group>Familie &amp; &lt;Freunde&gt;</n:group>" in set)
-        assertTrue("<d:set>" in set)
-        val remove = DavXml.setGroup(null)
-        assertTrue("<d:remove>" in remove && "<n:group/>" in remove)
-        assertTrue("<d:remove>" in DavXml.setGroup("   "))
+        assertTrue("<n:order>30</n:order>" in set)
+        assertFalse("<d:remove>" in set)
+        val remove = DavXml.setListMeta(null)
+        assertTrue("<d:remove>" in remove && "<n:group/>" in remove && "<d:set>" !in remove)
+        val ungroupedWithOrder = DavXml.setListMeta("   ", 10)
+        assertTrue("<d:remove>" in ungroupedWithOrder && "<n:order>10</n:order>" in ungroupedWithOrder)
+        // Both variants must be well-formed XML.
+        listOf(set, remove, ungroupedWithOrder).forEach {
+            javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(it.byteInputStream())
+        }
         assertTrue("http://devsmoms.de/ns/nctodo" in DavXml.PROPFIND_CALENDARS)
     }
 

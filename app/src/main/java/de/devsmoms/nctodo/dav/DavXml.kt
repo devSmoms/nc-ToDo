@@ -188,7 +188,7 @@ object DavXml {
           <d:prop>
             <d:resourcetype/><d:displayname/><cs:getctag/><a:calendar-color/>
             <c:supported-calendar-component-set/><d:current-user-privilege-set/><c:calendar-description/>
-            <oc:invite/><oc:owner-principal/><nc:owner-displayname/><n:group/>
+            <oc:invite/><oc:owner-principal/><nc:owner-displayname/><n:group/><n:order/>
           </d:prop>
         </d:propfind>
     """.trimIndent()
@@ -221,18 +221,21 @@ object DavXml {
     """.trimIndent()
 
     /**
-     * Sets (or with null removes) the group of a list. Stored by Nextcloud as a dead property,
-     * per user, so on shared lists everybody keeps their own grouping; other apps ignore it.
+     * Sets group (null/blank removes it) and optionally the position of a list in the menu.
+     * Stored by Nextcloud as dead properties, which other apps ignore.
      */
-    fun setGroup(group: String?) = HEADER + if (group.isNullOrBlank()) """
-        <d:propertyupdate xmlns:d="DAV:" xmlns:n="http://devsmoms.de/ns/nctodo">
-          <d:remove><d:prop><n:group/></d:prop></d:remove>
-        </d:propertyupdate>
-    """.trimIndent() else """
-        <d:propertyupdate xmlns:d="DAV:" xmlns:n="http://devsmoms.de/ns/nctodo">
-          <d:set><d:prop><n:group>${esc(group.trim())}</n:group></d:prop></d:set>
-        </d:propertyupdate>
-    """.trimIndent()
+    fun setListMeta(group: String?, order: Int? = null): String {
+        val set = buildString {
+            if (!group.isNullOrBlank()) append("<n:group>${esc(group.trim())}</n:group>")
+            if (order != null) append("<n:order>$order</n:order>")
+        }
+        return HEADER + buildString {
+            append("<d:propertyupdate xmlns:d=\"DAV:\" xmlns:n=\"http://devsmoms.de/ns/nctodo\">")
+            if (set.isNotEmpty()) append("<d:set><d:prop>").append(set).append("</d:prop></d:set>")
+            if (group.isNullOrBlank()) append("<d:remove><d:prop><n:group/></d:prop></d:remove>")
+            append("</d:propertyupdate>")
+        }
+    }
 
     /** Nextcloud trash bin: retention period and deleted calendars (lists). */
     val PROPFIND_TRASHBIN = HEADER + """

@@ -48,14 +48,58 @@ import androidx.compose.ui.unit.dp
 import de.devsmoms.nctodo.data.CalDavRepository
 import de.devsmoms.nctodo.data.TaskList
 
-/** Groups of the visible lists, sorted by name; lists keep their order inside a group. */
-fun groupedLists(lists: List<TaskList>): Pair<List<TaskList>, List<Pair<String, List<TaskList>>>> {
-    val ungrouped = lists.filter { it.group == null }
-    val groups = lists.filter { it.group != null }
-        .groupBy { it.group!! }
-        .toList()
-        .sortedBy { it.first.lowercase() }
-    return ungrouped to groups
+/** Menu order: position from drag and drop first, lists never arranged go last by name. */
+private val listOrder = compareBy<TaskList>({ it.order ?: Int.MAX_VALUE }, { ListIcons.label(it.name).lowercase() })
+
+/**
+ * Lists split into ungrouped ones and groups, both in menu order. A group sits where its
+ * first list sits; [emptyGroups] (created on this device, no list yet) come last.
+ */
+fun groupedLists(lists: List<TaskList>, emptyGroups: Set<String> = emptySet()): Pair<List<TaskList>, List<Pair<String, List<TaskList>>>> {
+    val sorted = lists.sortedWith(listOrder)
+    val ungrouped = sorted.filter { it.group == null }
+    val groups = sorted.filter { it.group != null }.groupBy { it.group!! }.toList()
+    val empty = emptyGroups.filter { g -> groups.none { it.first == g } }.sortedBy { it.lowercase() }.map { it to emptyList<TaskList>() }
+    return ungrouped to (groups + empty)
+}
+
+/** One row of the reorderable part of the menu. */
+sealed interface DrawerRow {
+    val key: String
+    data class Header(val name: String) : DrawerRow { override val key get() = "group:$name" }
+    data class Item(val list: TaskList) : DrawerRow { override val key get() = list.url }
+}
+
+/** Rows as shown: ungrouped lists, then each group header followed by its lists unless collapsed. */
+fun drawerRows(lists: List<TaskList>, emptyGroups: Set<String>, collapsed: Set<String>): List<DrawerRow> {
+    val (ungrouped, groups) = groupedLists(lists, emptyGroups)
+    return buildList {
+        ungrouped.forEach { add(DrawerRow.Item(it)) }
+        groups.forEach { (name, members) ->
+            add(DrawerRow.Header(name))
+            if (name !in collapsed) members.forEach { add(DrawerRow.Item(it)) }
+        }
+    }
+}
+
+/**
+ * Turns the rows after a drop into the new arrangement: a list belongs to the nearest group
+ * header above it (none above = ungrouped). Lists hidden in collapsed groups keep their place.
+ */
+fun arrangementOf(rows: List<DrawerRow>, lists: List<TaskList>, collapsed: Set<String>): List<Pair<String, String?>> {
+    val hidden = lists.filter { it.group != null && it.group in collapsed }.sortedWith(listOrder).groupBy { it.group!! }
+    var group: String? = null
+    return buildList {
+        rows.forEach { row ->
+            when (row) {
+                is DrawerRow.Header -> {
+                    group = row.name
+                    if (row.name in collapsed) hidden[row.name].orEmpty().forEach { add(it.url to row.name) }
+                }
+                is DrawerRow.Item -> add(row.list.url to group)
+            }
+        }
+    }
 }
 
 /** Group header in the menu: tap toggles, ⋮ offers new list, rename and dissolve. */
@@ -64,6 +108,7 @@ fun GroupHeader(
     name: String,
     openCount: Int,
     collapsed: Boolean,
+    empty: Boolean,
     containsSelection: Boolean,
     onToggle: () -> Unit,
     onNewList: () -> Unit,
@@ -80,10 +125,15 @@ fun GroupHeader(
     ) {
         Icon(if (collapsed) Icons.Outlined.Folder else Icons.Outlined.FolderOpen, null, tint = tint)
         Spacer(Modifier.width(12.dp))
-        Text(
-            name, fontWeight = FontWeight.SemiBold, color = if (collapsed && containsSelection) tint else MaterialTheme.colorScheme.onSurface,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                name, fontWeight = FontWeight.SemiBold, color = if (collapsed && containsSelection) tint else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            if (empty) {
+                Text("Listen gedrückt halten und hierher ziehen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         if (collapsed && openCount > 0) {
             Text(openCount.toString(), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -175,13 +225,14 @@ private fun GroupOption(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Renames a group (all its lists move to the new name). */
+/** Name of a new group, or new name of an existing one ([name] = current name, empty for new). */
 @Composable
-fun RenameGroupDialog(name: String, onDismiss: () -> Unit, onRename: (String) -> Unit) {
+fun GroupNameDialog(name: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var text by remember { mutableStateOf(name) }
+    val isNew = name.isEmpty()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Gruppe umbenennen") },
+        title = { Text(if (isNew) "Neue Gruppe" else "Gruppe umbenennen") },
         text = {
             OutlinedTextField(
                 value = text,
@@ -192,7 +243,9 @@ fun RenameGroupDialog(name: String, onDismiss: () -> Unit, onRename: (String) ->
             )
         },
         confirmButton = {
-            TextButton(onClick = { onRename(text.trim()) }, enabled = text.isNotBlank() && text.trim() != name) { Text("Umbenennen") }
+            TextButton(onClick = { onSave(text.trim()) }, enabled = text.isNotBlank() && text.trim() != name) {
+                Text(if (isNew) "Erstellen" else "Umbenennen")
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
     )

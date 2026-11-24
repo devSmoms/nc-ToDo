@@ -11,8 +11,8 @@ android {
         applicationId = "de.devsmoms.nctodo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "2.4.0"
+        versionCode = 18
+        versionName = "2.5.0"
     }
 
     // Release signing comes from environment variables (GitHub Actions secrets or a local
@@ -75,6 +75,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Drag and drop with auto scroll for the list menu (Apache-2.0).
+    implementation("sh.calvin.reorderable:reorderable:3.1.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test:2.3.21")

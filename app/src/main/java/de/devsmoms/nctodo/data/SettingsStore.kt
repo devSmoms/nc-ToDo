@@ -37,6 +37,8 @@ data class Settings(
     val hideDeckLists: Boolean = true,
     /** List groups collapsed in the menu. */
     val collapsedGroups: Set<String> = emptySet(),
+    /** Groups created in the menu that contain no list yet (only kept on this device). */
+    val emptyGroups: Set<String> = emptySet(),
 ) {
     companion object {
         const val START_LAST = "last"
@@ -84,6 +86,7 @@ class SettingsStore(context: Context, private val prefsName: String) {
             confirmRemovals = prefs.getBoolean("confirmRemovals", d.confirmRemovals),
             hideDeckLists = prefs.getBoolean("hideDeckLists", d.hideDeckLists),
             collapsedGroups = prefs.getStringSet("collapsedGroups", null)?.toSet() ?: d.collapsedGroups,
+            emptyGroups = prefs.getStringSet("emptyGroups", null)?.toSet() ?: d.emptyGroups,
         )
     }
 
@@ -105,6 +108,7 @@ class SettingsStore(context: Context, private val prefsName: String) {
             .putBoolean("hideDeckLists", s.hideDeckLists)
             // Always a fresh set: SharedPreferences must not hold on to a set it handed out.
             .putStringSet("collapsedGroups", HashSet(s.collapsedGroups))
+            .putStringSet("emptyGroups", HashSet(s.emptyGroups))
             .apply()
         _settings.value = s
     }
