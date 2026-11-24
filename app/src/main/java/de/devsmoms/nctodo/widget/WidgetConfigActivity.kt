@@ -23,6 +23,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -41,12 +42,16 @@ import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.lifecycle.lifecycleScope
 import de.devsmoms.nctodo.NcTodoApp
+import de.devsmoms.nctodo.sync.LocalData
+import de.devsmoms.nctodo.ui.AccountAvatar
 import de.devsmoms.nctodo.ui.ListIcons
 import de.devsmoms.nctodo.ui.Selection
 import de.devsmoms.nctodo.ui.SmartList
 import de.devsmoms.nctodo.ui.forDisplay
+import de.devsmoms.nctodo.ui.serverLabel
 import de.devsmoms.nctodo.ui.theme.NcTodoTheme
 import de.devsmoms.nctodo.ui.theme.parseColor
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 /** Shown when a widget is placed (and when it is reconfigured): choose the list it shows. */
@@ -55,6 +60,10 @@ class WidgetConfigActivity : ComponentActivity() {
 
     private var openAppOnTap by mutableStateOf(false)
     private var current by mutableStateOf<Selection?>(null)
+    /** Account the widget shows; null until chosen (then the active account is used). */
+    private var account by mutableStateOf<String?>(null)
+    private var currentAccount: String? = null
+    private val noData = MutableStateFlow(LocalData())
 
     private data class Option(val selection: Selection, val label: String, val icon: ImageVector, val tint: Color)
 
@@ -73,17 +82,23 @@ class WidgetConfigActivity : ComponentActivity() {
 
         // Reconfiguring an existing widget: start from its current settings.
         lifecycleScope.launch {
+            c.awaitLoaded()
             runCatching {
                 val glanceId = GlanceAppWidgetManager(this@WidgetConfigActivity).getGlanceIdBy(appWidgetId)
                 val prefs = getAppWidgetState(this@WidgetConfigActivity, PreferencesGlanceStateDefinition, glanceId)
                 openAppOnTap = prefs[WidgetOpenAppKey] ?: false
                 current = Selection.decode(prefs[WidgetSelectionKey])
+                currentAccount = prefs[WidgetAccountKey] ?: c.sessions.value.firstOrNull()?.id
+                if (account == null) account = currentAccount
             }
         }
 
         setContent {
-            val settings by c.settings.collectAsState()
-            val allData by c.repository.data.collectAsState()
+            val sessions by c.sessions.collectAsState()
+            val active by c.active.collectAsState()
+            val session = sessions.firstOrNull { it.id == account } ?: active
+            val settings by (session?.settings ?: c.settings).collectAsState()
+            val allData by (session?.repository?.data ?: noData).collectAsState()
             val data = allData.forDisplay(settings.hideDeckLists)
             val options = listOf(
                 Option(Selection.Smart(SmartList.MY_DAY), SmartList.MY_DAY.title, Icons.Outlined.WbSunny, Color(0xFF9E7B00)),
@@ -106,6 +121,26 @@ class WidgetConfigActivity : ComponentActivity() {
                                 modifier = Modifier.clickable { openAppOnTap = !openAppOnTap },
                             )
                             HorizontalDivider()
+                            // With several accounts the widget can show any of them.
+                            if (sessions.size > 1) {
+                                Text(
+                                    "Konto",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp),
+                                )
+                                sessions.forEach { acc ->
+                                    val creds = acc.credentials.value
+                                    ListItem(
+                                        headlineContent = { Text(creds.displayName) },
+                                        supportingContent = { Text("${creds.username} · ${serverLabel(creds.serverUrl)}") },
+                                        leadingContent = { AccountAvatar(creds.displayName, acc.id, 36.dp) },
+                                        trailingContent = { RadioButton(selected = acc.id == session?.id, onClick = { account = acc.id }) },
+                                        modifier = Modifier.clickable { account = acc.id },
+                                    )
+                                }
+                                HorizontalDivider()
+                            }
                             Text(
                                 "Liste wählen – speichert das Widget",
                                 style = MaterialTheme.typography.titleSmall,
@@ -117,8 +152,10 @@ class WidgetConfigActivity : ComponentActivity() {
                             ListItem(
                                 headlineContent = { Text(o.label) },
                                 leadingContent = { Icon(o.icon, null, tint = o.tint) },
-                                trailingContent = { if (o.selection == current) Icon(Icons.Outlined.Check, "Aktuell", tint = o.tint) },
-                                modifier = Modifier.clickable { choose(appWidgetId, o.selection) },
+                                trailingContent = {
+                                    if (o.selection == current && session?.id == currentAccount) Icon(Icons.Outlined.Check, "Aktuell", tint = o.tint)
+                                },
+                                modifier = Modifier.clickable { choose(appWidgetId, session?.id, o.selection) },
                             )
                             if (o.selection == Selection.Smart(SmartList.ALL) && data.lists.isNotEmpty()) {
                                 HorizontalDivider(Modifier.padding(horizontal = 16.dp))
@@ -140,10 +177,11 @@ class WidgetConfigActivity : ComponentActivity() {
         }
     }
 
-    private fun choose(appWidgetId: Int, selection: Selection) {
+    private fun choose(appWidgetId: Int, accountId: String?, selection: Selection) {
         lifecycleScope.launch {
             val glanceId = GlanceAppWidgetManager(this@WidgetConfigActivity).getGlanceIdBy(appWidgetId)
             updateAppWidgetState(this@WidgetConfigActivity, glanceId) {
+                if (accountId != null) it[WidgetAccountKey] = accountId else it.remove(WidgetAccountKey)
                 it[WidgetSelectionKey] = selection.encode()
                 it[WidgetOpenAppKey] = openAppOnTap
             }

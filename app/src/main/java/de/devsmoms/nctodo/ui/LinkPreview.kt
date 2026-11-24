@@ -59,6 +59,9 @@ object LinkPreviews {
     private const val MAX_IMAGE = 1024 * 1024L
     private val cache = LruCache<String, LinkInfo>(64)
 
+    /** Forgets all previews (on logout). */
+    fun clear() = cache.evictAll()
+
     private val http = OkHttpClient.Builder()
         .connectionSpecs(listOf(ConnectionSpec.RESTRICTED_TLS, ConnectionSpec.MODERN_TLS))
         .followSslRedirects(false)

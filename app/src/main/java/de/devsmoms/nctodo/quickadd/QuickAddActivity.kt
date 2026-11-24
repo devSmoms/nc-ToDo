@@ -40,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -77,28 +78,44 @@ class QuickAddActivity : ComponentActivity() {
         enableEdgeToEdge()
         val c = (application as NcTodoApp).container
         val presetList = intent.getStringExtra(EXTRA_LIST_URL)
+        val presetAccount = intent.getStringExtra(EXTRA_ACCOUNT)
 
         setContent {
-            val settings by c.settings.collectAsState()
-            val account by c.account.collectAsState()
+            val sessions by c.sessions.collectAsState()
+            val active by c.active.collectAsState()
             val ready by c.ready.collectAsState()
-            val data by c.repository.data.collectAsState()
+            // Widget "+": the widget's account; tile: the active account.
+            val home = sessions.firstOrNull { it.id == presetAccount } ?: active
+            val settings by (home?.settings ?: c.settings).collectAsState()
+            // Writable lists of every account, the home account first.
+            val ordered = listOfNotNull(home) + sessions.filter { it.id != home?.id }
+            val targets = ordered.flatMap { s ->
+                key(s.id) {
+                    val data by s.repository.data.collectAsState()
+                    val hideDeck = s.settings.collectAsState().value.hideDeckLists
+                    val label = if (sessions.size > 1) s.credentials.collectAsState().value.displayName else null
+                    data.forDisplay(hideDeck).lists.filter { it.canWrite }.map { QuickTarget(s.id, label, it) }
+                }
+            }
             NcTodoTheme(settings.theme) {
                 QuickAddContent(
                     allDayDefault = settings.allDayDefault,
                     ready = ready,
-                    loggedIn = account != null,
-                    lists = data.forDisplay(settings.hideDeckLists).lists.filter { it.canWrite },
+                    loggedIn = home != null,
+                    targets = targets,
+                    homeAccount = home?.id,
                     presetListUrl = presetList,
                     onCancel = { finish() },
                     onOpenApp = {
                         startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         finish()
                     },
-                    onAdd = { title, list, due, starred ->
+                    onAdd = { title, target, due, starred ->
                         lifecycleScope.launch {
                             try {
-                                c.repository.createTask(list.url, TodoMapper.newCalendar(title.trim(), due = due?.date, dueTime = due?.time, starred = starred))
+                                val repo = c.session(target.account)?.repository ?: error("Konto nicht mehr angemeldet")
+                                val list = target.list
+                                repo.createTask(list.url, TodoMapper.newCalendar(title.trim(), due = due?.date, dueTime = due?.time, starred = starred))
                                 Toast.makeText(this@QuickAddActivity, "Zu „${ListIcons.label(list.name)}“ hinzugefügt", Toast.LENGTH_SHORT).show()
                                 finish()
                             } catch (e: Exception) {
@@ -113,36 +130,48 @@ class QuickAddActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_LIST_URL = "listUrl"
+        const val EXTRA_ACCOUNT = "account"
 
-        fun intent(context: Context, listUrl: String? = null): Intent =
+        fun intent(context: Context, account: String? = null, listUrl: String? = null): Intent =
             Intent(context, QuickAddActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                .apply { if (listUrl != null) putExtra(EXTRA_LIST_URL, listUrl) }
+                .apply {
+                    if (account != null) putExtra(EXTRA_ACCOUNT, account)
+                    if (listUrl != null) putExtra(EXTRA_LIST_URL, listUrl)
+                }
     }
 }
+
+/** A list a quick task can go to; [accountLabel] is only set when there are several accounts. */
+private data class QuickTarget(val account: String, val accountLabel: String?, val list: TaskList)
 
 @Composable
 private fun QuickAddContent(
     allDayDefault: Boolean,
     ready: Boolean,
     loggedIn: Boolean,
-    lists: List<TaskList>,
+    targets: List<QuickTarget>,
+    homeAccount: String?,
     presetListUrl: String?,
     onCancel: () -> Unit,
     onOpenApp: () -> Unit,
-    onAdd: (String, TaskList, DueValue?, Boolean) -> Unit,
+    onAdd: (String, QuickTarget, DueValue?, Boolean) -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
     var due by remember { mutableStateOf<DueValue?>(null) }
     var starred by remember { mutableStateOf(false) }
-    var listUrl by remember { mutableStateOf(presetListUrl) }
+    var chosen by remember { mutableStateOf(presetListUrl?.let { homeAccount to it }) }
     var listMenu by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
 
-    val list = lists.firstOrNull { it.url == listUrl } ?: lists.defaultTarget()
+    val homeTargets = targets.filter { it.account == homeAccount }
+    val target = targets.firstOrNull { it.account == chosen?.first && it.list.url == chosen?.second }
+        ?: homeTargets.map { it.list }.defaultTarget()?.let { d -> homeTargets.firstOrNull { it.list.url == d.url } }
+        ?: targets.firstOrNull()
+    val list = target?.list
     val accent = list?.let { parseColor(it.color) } ?: MaterialTheme.colorScheme.primary
     fun submit() {
-        if (text.isNotBlank() && list != null) onAdd(text, list, due, starred)
+        if (text.isNotBlank() && target != null) onAdd(text, target, due, starred)
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -184,15 +213,28 @@ private fun QuickAddContent(
                             TextButton(onClick = { listMenu = true }) {
                                 Icon(ListIcons.iconOf(list.name) ?: ListIcons.DEFAULT, null, Modifier.size(20.dp), tint = accent)
                                 Spacer(Modifier.width(8.dp))
-                                Text(ListIcons.label(list.name), color = accent)
+                                Text(
+                                    ListIcons.label(list.name) + (target?.accountLabel?.let { " · $it" } ?: ""),
+                                    color = accent, maxLines = 1,
+                                )
                                 Icon(Icons.Outlined.ExpandMore, null, tint = accent)
                             }
                             DropdownMenu(expanded = listMenu, onDismissRequest = { listMenu = false }) {
-                                lists.forEach { l ->
+                                targets.forEachIndexed { i, t ->
+                                    // Account name as a small header whenever the account changes.
+                                    if (t.accountLabel != null && (i == 0 || targets[i - 1].account != t.account)) {
+                                        Text(
+                                            t.accountLabel,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                                        )
+                                    }
+                                    val l = t.list
                                     DropdownMenuItem(
                                         text = { Text(ListIcons.label(l.name)) },
                                         leadingIcon = { Icon(ListIcons.iconOf(l.name) ?: ListIcons.DEFAULT, null, tint = parseColor(l.color)) },
-                                        onClick = { listUrl = l.url; listMenu = false },
+                                        onClick = { chosen = t.account to l.url; listMenu = false },
                                     )
                                 }
                             }

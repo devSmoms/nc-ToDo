@@ -53,6 +53,7 @@ import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.WbSunny
@@ -119,14 +120,19 @@ fun AppRoot(vm: AppViewModel) {
                 undone = snackbar.showSnackbar(ev.text, actionLabel = "Rückgängig", duration = SnackbarDuration.Short) ==
                     SnackbarResult.ActionPerformed
             } finally {
-                if (undone) vm.undoDelete(ev.taskUrl) else vm.commitDelete(ev.taskUrl)
+                if (undone) vm.undoDelete(ev.taskUrl) else vm.commitDelete(ev.taskUrl, ev.account)
             }
         }
     }
 
     when {
         !state.ready -> Box(Modifier.fillMaxSize())
-        state.credentials == null -> LoginScreen(state.loginBusy, state.loginError, vm::login)
+        state.credentials == null || state.addingAccount -> {
+            // "Konto hinzufügen" on top of an existing account can be cancelled.
+            val cancel: (() -> Unit)? = if (state.credentials != null) vm::cancelAddAccount else null
+            if (cancel != null) BackHandler { cancel() }
+            LoginScreen(state.loginBusy, state.loginError, onCancel = cancel, onLogin = vm::login)
+        }
         else -> when (val s = state.screen) {
             is Screen.Main -> MainScreen(state, vm, snackbar)
             is Screen.Detail -> {
@@ -161,6 +167,7 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
     val scope = rememberCoroutineScope()
     var listDialog by remember { mutableStateOf<ListDialogMode?>(null) }
     var confirmDelete by remember { mutableStateOf<TaskList?>(null) }
+    var accountDialog by remember { mutableStateOf(false) }
 
     val sel = state.selection
     val currentList = (sel as? Selection.OfList)?.let { state.list(it.url) }
@@ -182,7 +189,7 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
                 vm.open(Screen.Trash)
                 vm.loadTrash()
                 scope.launch { drawer.close() }
-            })
+            }, onAccounts = { accountDialog = true })
         },
     ) {
         Scaffold(
@@ -225,6 +232,16 @@ fun MainScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
         }
     }
 
+    if (accountDialog) {
+        AccountDialog(
+            state = state,
+            onSwitch = { vm.switchAccount(it); scope.launch { drawer.close() } },
+            onAdd = { vm.addAccount(); scope.launch { drawer.close() } },
+            onLogout = vm::logout,
+            pendingOf = vm::pendingCount,
+            onDismiss = { accountDialog = false },
+        )
+    }
     listDialog?.let { mode ->
         ListDialog(mode, onDismiss = { listDialog = null }) { name, color, description ->
             listDialog = null
@@ -500,21 +517,36 @@ private fun AddTaskBar(accent: Color, smart: SmartList?, allDayDefault: Boolean,
 }
 
 @Composable
-private fun Drawer(state: UiState, onSelect: (Selection) -> Unit, onNewList: () -> Unit, onSettings: () -> Unit, onTrash: () -> Unit) {
+private fun Drawer(
+    state: UiState,
+    onSelect: (Selection) -> Unit,
+    onNewList: () -> Unit,
+    onSettings: () -> Unit,
+    onTrash: () -> Unit,
+    onAccounts: () -> Unit,
+) {
     fun count(kind: SmartList) = visibleTasks(state.copy(selection = Selection.Smart(kind))).count { !it.todo.completed }
     ModalDrawerSheet {
         LazyColumn(Modifier.fillMaxSize()) {
             item {
-                Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) { Text(state.credentials?.displayName?.take(1)?.uppercase().orEmpty(), fontWeight = FontWeight.Bold) }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(state.credentials?.displayName.orEmpty(), fontWeight = FontWeight.SemiBold)
-                        Text(state.credentials?.serverUrl?.removePrefix("https://").orEmpty(), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Avatar and name open the account switcher.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(onClick = onAccounts).padding(8.dp),
+                    ) {
+                        AccountAvatar(state.credentials?.displayName.orEmpty(), state.activeAccount)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(state.credentials?.displayName.orEmpty(), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                state.credentials?.serverUrl?.let(::serverLabel).orEmpty() +
+                                    if (state.accounts.size > 1) " · ${state.accounts.size} Konten" else "",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Icon(Icons.Outlined.UnfoldMore, "Konto wechseln", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen") }
                 }

@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.SwitchAccount
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.StarBorder
@@ -128,6 +129,7 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
     val accent = MaterialTheme.colorScheme.primary
     var pickTime by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
+    var accountDialog by remember { mutableStateOf(false) }
     var showLicense by remember { mutableStateOf(false) }
     var showLibraries by remember { mutableStateOf(false) }
 
@@ -177,11 +179,16 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
         LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 // Same big header as the task lists.
-                Text(
-                    "Einstellungen",
-                    style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = accent,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                )
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                    Text("Einstellungen", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = accent)
+                    // Settings are stored per account; make that visible when there is more than one.
+                    if (state.accounts.size > 1) {
+                        Text(
+                            "Gelten für ${state.credentials?.displayName.orEmpty()}",
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
             // ------------------------------------------------ start & appearance
@@ -364,7 +371,14 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
                     SettingRow(
                         icon = Icons.Outlined.Person, tint = accent,
                         title = state.credentials?.displayName.orEmpty(),
-                        subtitle = "${state.credentials?.username} · ${state.credentials?.serverUrl?.removePrefix("https://")}",
+                        subtitle = "${state.credentials?.username} · ${state.credentials?.serverUrl?.let(::serverLabel)}",
+                    )
+                    RowDivider()
+                    SettingRow(
+                        icon = Icons.Outlined.SwitchAccount, tint = accent,
+                        title = "Konto wechseln oder hinzufügen",
+                        subtitle = if (state.accounts.size > 1) "${state.accounts.size} Konten auf diesem Gerät" else "Weitere Nextcloud-Konten verbinden",
+                        onClick = { accountDialog = true },
                     )
                     RowDivider()
                     SettingRow(
@@ -375,7 +389,8 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
                     RowDivider()
                     SettingRow(
                         icon = Icons.AutoMirrored.Outlined.Logout, tint = MaterialTheme.colorScheme.error,
-                        title = "Abmelden", titleColor = MaterialTheme.colorScheme.error,
+                        title = "Von diesem Konto abmelden", titleColor = MaterialTheme.colorScheme.error,
+                        subtitle = "Löscht alle Daten des Kontos auf diesem Gerät",
                         onClick = { confirmLogout = true },
                     )
                 }
@@ -464,12 +479,25 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
     }
     if (confirmLogout) {
         ConfirmDialog(
-            title = "Abmelden?",
+            title = "${state.credentials?.displayName.orEmpty()} abmelden?",
             text = (if (state.pendingCount > 0) "Achtung: ${state.pendingCount} Änderung(en) wurden noch nicht übertragen und gehen verloren. " else "") +
-                "Zugangsdaten und Offline-Daten werden von diesem Gerät gelöscht.",
+                "Zugangsdaten, Offline-Daten und Einstellungen dieses Kontos werden von diesem Gerät gelöscht. Auf dem Server bleibt alles erhalten.",
             confirm = "Abmelden",
             onDismiss = { confirmLogout = false },
-        ) { confirmLogout = false; vm.logout() }
+        ) {
+            confirmLogout = false
+            state.activeAccount?.let(vm::logout)
+        }
+    }
+    if (accountDialog) {
+        AccountDialog(
+            state = state,
+            onSwitch = vm::switchAccount,
+            onAdd = vm::addAccount,
+            onLogout = vm::logout,
+            pendingOf = vm::pendingCount,
+            onDismiss = { accountDialog = false },
+        )
     }
 }
 

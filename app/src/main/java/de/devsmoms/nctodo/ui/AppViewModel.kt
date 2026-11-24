@@ -3,6 +3,7 @@ package de.devsmoms.nctodo.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import de.devsmoms.nctodo.AccountSession
 import de.devsmoms.nctodo.NcTodoApp
 import de.devsmoms.nctodo.data.Credentials
 import de.devsmoms.nctodo.data.PrincipalHit
@@ -17,13 +18,20 @@ import de.devsmoms.nctodo.dav.Principals
 import de.devsmoms.nctodo.data.TrashContent
 import de.devsmoms.nctodo.ical.Assignee
 import de.devsmoms.nctodo.ical.TodoMapper
+import de.devsmoms.nctodo.sync.LocalData
 import de.devsmoms.nctodo.sync.OfflineException
+import de.devsmoms.nctodo.sync.SyncStatus
 import de.devsmoms.nctodo.sync.TaskFields
+import de.devsmoms.nctodo.sync.TaskRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -62,9 +70,17 @@ sealed interface Screen {
     data object Trash : Screen
 }
 
+/** One logged-in account as shown in the account switcher. */
+data class AccountInfo(val id: String, val credentials: Credentials, val pendingCount: Int)
+
 data class UiState(
     val ready: Boolean = false,
     val credentials: Credentials? = null,
+    /** All accounts on this device; [activeAccount] is the one shown. */
+    val accounts: List<AccountInfo> = emptyList(),
+    val activeAccount: String? = null,
+    /** Login form shown on top of an existing account ("Konto hinzufügen"). */
+    val addingAccount: Boolean = false,
     val loginBusy: Boolean = false,
     val loginError: String? = null,
     val syncing: Boolean = false,
@@ -90,6 +106,7 @@ data class UiState(
 
 /** Purely UI-local state (navigation, login form, search). */
 private data class LocalUi(
+    val addingAccount: Boolean = false,
     val loginBusy: Boolean = false,
     val loginError: String? = null,
     val selection: Selection = Selection.Smart(SmartList.MY_DAY),
@@ -101,38 +118,72 @@ private data class LocalUi(
     val trashError: String? = null,
 )
 
+/** Snapshot of the active account's flows. */
+private data class ActiveView(
+    val credentials: Credentials?,
+    val data: LocalData,
+    val status: SyncStatus,
+    val settings: Settings,
+)
+
+@OptIn(ExperimentalCoroutinesApi::class)
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val c = (app as NcTodoApp).container
-    private val repo = c.repository
+
+    /** Repository of the account shown right now. */
+    private val repo: TaskRepository
+        get() = c.active.value?.repository ?: throw IllegalStateException("Nicht angemeldet")
+
     private val local = MutableStateFlow(LocalUi(selection = startSelection()))
 
-    /** Screen to open with, according to the "Startbildschirm" setting. */
+    /** Screen to open with, according to the "Startbildschirm" setting of the active account. */
     private fun startSelection(): Selection {
-        val start = c.settings.value.startScreen
-        val wanted = if (start == Settings.START_LAST) c.lastSelection else start
+        val session = c.active.value ?: return Selection.DEFAULT
+        val start = session.settings.value.startScreen
+        val wanted = if (start == Settings.START_LAST) session.lastSelection else start
         return Selection.decode(wanted) ?: Selection.DEFAULT
+    }
+
+    /** Navigation, selection and pending UI state never carry over to another account. */
+    private fun resetForAccount() {
+        local.value = LocalUi(selection = startSelection())
     }
 
     private val messages = Channel<String>(Channel.BUFFERED)
     val messageFlow = messages.receiveAsFlow()
 
-    /** A swipe deletion waiting for "Rückgängig" or timeout. */
-    data class UndoEvent(val text: String, val taskUrl: String)
+    /** A swipe deletion waiting for "Rückgängig" or timeout; bound to the account it was made in. */
+    data class UndoEvent(val text: String, val taskUrl: String, val account: String)
     private val undoEvents = Channel<UndoEvent>(Channel.BUFFERED)
     val undoFlow = undoEvents.receiveAsFlow()
 
-    val state: StateFlow<UiState> = combine(c.account, repo.data, repo.status, c.settings, local) { account, allData, status, settings, ui ->
+    private val activeView = c.active.flatMapLatest { s: AccountSession? ->
+        if (s == null) flowOf(ActiveView(null, LocalData(), SyncStatus(), Settings()))
+        else combine(s.credentials, s.repository.data, s.repository.status, s.settings) { cr, d, st, se -> ActiveView(cr, d, st, se) }
+    }
+
+    private val accountsFlow = c.sessions.flatMapLatest { list ->
+        if (list.isEmpty()) flowOf(emptyList())
+        else combine(list.map { s -> combine(s.credentials, s.repository.data) { cr, d -> AccountInfo(s.id, cr, d.pending.size) } }) { it.toList() }
+    }
+
+    val state: StateFlow<UiState> = combine(activeView, accountsFlow, local, c.ready, c.active) { view, accounts, ui, ready, active ->
+        val settings = view.settings
+        val allData = view.data
         val data = allData.forDisplay(settings.hideDeckLists)
         val sel = ui.selection
         val validSel = if (sel is Selection.OfList && data.list(sel.url) == null && data.lists.isNotEmpty()) Selection.Smart(SmartList.MY_DAY) else sel
         UiState(
-            ready = c.ready.value,
-            credentials = account,
+            ready = ready,
+            credentials = view.credentials,
+            accounts = accounts,
+            activeAccount = active?.id,
+            addingAccount = ui.addingAccount,
             loginBusy = ui.loginBusy,
             loginError = ui.loginError,
-            syncing = status.running,
-            offline = status.offline,
-            lastSync = status.lastSuccess ?: data.lastSync,
+            syncing = view.status.running,
+            offline = view.status.offline,
+            lastSync = view.status.lastSuccess ?: data.lastSync,
             pendingCount = allData.pending.size,
             lists = data.lists,
             tasks = data.tasks,
@@ -145,11 +196,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             trashLoading = ui.trashLoading,
             trashError = ui.trashError,
         )
-    }.combine(c.ready) { s, ready -> s.copy(ready = ready) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState())
+
+    private var deepLinked = false
 
     init {
         viewModelScope.launch { c.events.collect { messages.send(it) } }
+        // The accounts are loaded asynchronously; open the start screen of the active one.
+        viewModelScope.launch {
+            c.awaitLoaded()
+            if (!deepLinked) local.update { it.copy(selection = startSelection()) }
+        }
     }
 
     // ---------------------------------------------------------------- session
@@ -163,33 +220,60 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 c.login(server, user.trim(), password)
-                local.value = LocalUi(selection = startSelection())
+                resetForAccount()
             } catch (e: Exception) {
                 local.update { it.copy(loginBusy = false, loginError = friendly(e)) }
             }
         }
     }
 
-    fun logout() {
+    /** Shows the login form on top of the current account. */
+    fun addAccount() = local.update { it.copy(addingAccount = true, loginBusy = false, loginError = null) }
+    fun cancelAddAccount() = local.update { it.copy(addingAccount = false, loginBusy = false, loginError = null) }
+
+    fun switchAccount(id: String) {
+        if (id == c.active.value?.id) return
+        c.switchTo(id)
+        resetForAccount()
+    }
+
+    /** Logs [id] out and deletes all its data from the device. */
+    fun logout(id: String) {
         viewModelScope.launch {
-            c.logout()
-            c.lastSelection = null
-            // A specific list of the old account makes no sense as start screen anymore.
-            if (c.settings.value.startScreen.startsWith("list:")) c.updateSettings { it.copy(startScreen = Settings.START_LAST) }
-            local.value = LocalUi()
+            val wasActive = c.active.value?.id == id
+            c.logout(id)
+            if (wasActive) resetForAccount()
+            c.active.value?.let { message("Abgemeldet – jetzt aktiv: ${it.credentials.value.displayName}") }
         }
     }
+
+    /** Unsent changes of an account (warned about before logout). */
+    fun pendingCount(id: String): Int = c.session(id)?.repository?.data?.value?.pending?.size ?: 0
 
     // ---------------------------------------------------------------- navigation
 
     fun select(sel: Selection) {
         local.update { it.copy(selection = sel, screen = Screen.Main) }
-        c.lastSelection = sel.encode()
+        c.active.value?.lastSelection = sel.encode()
     }
-    /** Deep link from the home screen widget. */
-    fun openFromWidget(selection: Selection, taskUrl: String?) {
-        select(selection)
-        if (taskUrl != null) local.update { it.copy(screen = Screen.Detail(taskUrl)) }
+
+    /** Deep link from a widget or notification: switches to its account first. */
+    fun openDeepLink(account: String?, selection: Selection?, taskUrl: String?) {
+        deepLinked = true
+        viewModelScope.launch {
+            c.awaitLoaded()
+            if (account != null) {
+                // The account may have been logged out since the widget was set up.
+                if (c.session(account) == null) return@launch
+                if (c.active.value?.id != account) {
+                    c.switchTo(account)
+                    resetForAccount()
+                }
+            }
+            local.update { it.copy(addingAccount = false) }
+            if (selection != null) select(selection)
+            if (taskUrl != null) local.update { it.copy(screen = Screen.Detail(taskUrl)) }
+        }
     }
 
     fun open(screen: Screen) = local.update { it.copy(screen = screen, searchResults = emptyList()) }
@@ -197,7 +281,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() = c.syncNow()
 
-    fun updateSettings(change: (Settings) -> Settings) = c.updateSettings(change)
+    /** Settings belong to the active account. */
+    fun updateSettings(change: (Settings) -> Settings) {
+        c.active.value?.updateSettings(change)
+    }
 
     // ---------------------------------------------------------------- tasks (work offline)
 
@@ -327,17 +414,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Swipe to delete: hide immediately, delete for real unless the user taps "Rückgängig". */
     fun swipeDelete(item: TaskItem) {
         if (state.value.list(item.listUrl)?.canWrite != true) return
+        val account = c.active.value?.id ?: return
         local.update { it.copy(hidden = it.hidden + item.url) }
         val title = item.todo.summary.ifBlank { "Aufgabe" }.let { if (it.length > 40) it.take(40) + "…" else it }
-        undoEvents.trySend(UndoEvent("„$title“ gelöscht", item.url))
+        undoEvents.trySend(UndoEvent("„$title“ gelöscht", item.url, account))
     }
 
     fun undoDelete(taskUrl: String) = local.update { it.copy(hidden = it.hidden - taskUrl) }
 
-    fun commitDelete(taskUrl: String) {
+    /** Deletes in the account the swipe happened in, even if the user switched meanwhile. */
+    fun commitDelete(taskUrl: String, account: String) {
         launchSafe {
             try {
-                repo.deleteTask(taskUrl)
+                c.session(account)?.repository?.deleteTask(taskUrl)
             } finally {
                 local.update { it.copy(hidden = it.hidden - taskUrl) }
             }

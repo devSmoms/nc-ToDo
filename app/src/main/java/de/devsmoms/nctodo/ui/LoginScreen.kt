@@ -14,16 +14,20 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -38,8 +42,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 
+/** Login form; with [onCancel] it is the "Konto hinzufügen" form shown on top of an existing account. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(busy: Boolean, error: String?, onLogin: (String, String, String) -> Unit) {
+fun LoginScreen(busy: Boolean, error: String?, onCancel: (() -> Unit)? = null, onLogin: (String, String, String) -> Unit) {
     // Block screenshots / screen recording / recents preview while credentials are on screen.
     val activity = LocalContext.current as? Activity
     DisposableEffect(Unit) {
@@ -53,13 +59,27 @@ fun LoginScreen(busy: Boolean, error: String?, onLogin: (String, String, String)
     var password by androidx.compose.runtime.remember { mutableStateOf("") }
     var showPassword by androidx.compose.runtime.remember { mutableStateOf(false) }
 
-    Scaffold { padding ->
+    Scaffold(
+        topBar = {
+            if (onCancel != null) {
+                TopAppBar(
+                    title = {},
+                    navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.Outlined.Close, "Abbrechen") } },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                )
+            }
+        },
+    ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("NC Todo", style = MaterialTheme.typography.headlineLarge)
-            Text("Mit deinem Nextcloud-Server per CalDAV verbinden.", style = MaterialTheme.typography.bodyMedium)
+            Text(if (onCancel != null) "Konto hinzufügen" else "NC Todo", style = MaterialTheme.typography.headlineLarge)
+            Text(
+                if (onCancel != null) "Ein weiteres Nextcloud-Konto verbinden – auch auf einem anderen Server. Es bekommt eigene Listen und Einstellungen."
+                else "Mit deinem Nextcloud-Server per CalDAV verbinden.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
             OutlinedTextField(
                 value = server, onValueChange = { server = it },
                 label = { Text("Server") }, placeholder = { Text("https://cloud.example.de") },
@@ -91,7 +111,8 @@ fun LoginScreen(busy: Boolean, error: String?, onLogin: (String, String, String)
             )
             if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
             Button(onClick = { onLogin(server, user, password) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Anmelden")
+                if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                else Text(if (onCancel != null) "Konto hinzufügen" else "Anmelden")
             }
         }
     }

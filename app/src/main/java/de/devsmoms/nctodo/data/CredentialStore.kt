@@ -19,9 +19,10 @@ data class Credentials(
  * stored blob is useless when copied off the device. App backups are disabled in the
  * manifest, so the blob does not leave the device via backup either.
  */
-class CredentialStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    private val cipher = KeystoreCipher("nctodo_credentials_v1", "nctodo-credentials-v1".toByteArray())
+class CredentialStore(context: Context, private val storage: AccountStorage) {
+    private val app = context.applicationContext
+    private val prefs = app.getSharedPreferences(storage.credentialPrefs, Context.MODE_PRIVATE)
+    private val cipher = KeystoreCipher(storage.credentialKeyAlias, storage.credentialAad.toByteArray())
 
     @Volatile private var cached: Credentials? = null
 
@@ -61,15 +62,16 @@ class CredentialStore(context: Context) {
         }
     }
 
+    /** Removes the blob, the preferences file itself and the Keystore key. */
     @Synchronized
     fun clear() {
         cached = null
         prefs.edit().clear().commit()
+        app.deleteSharedPreferences(storage.credentialPrefs)
         cipher.deleteKey()
     }
 
     private companion object {
-        const val PREFS = "secure_credentials"
         const val KEY_DATA = "data"
     }
 }

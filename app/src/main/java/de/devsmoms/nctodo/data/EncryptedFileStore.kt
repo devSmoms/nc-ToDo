@@ -19,9 +19,12 @@ import java.io.File
  * Offline cache: all lists, tasks and unsent changes in one AES-256-GCM encrypted file
  * inside the app's private storage. Writes are atomic, so a crash never leaves a broken file.
  */
-class EncryptedFileStore(context: Context) : LocalPersistence {
-    private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, "offline-cache.bin"))
-    private val cipher = KeystoreCipher("nctodo_cache_v1", "nctodo-cache-v1".toByteArray())
+class EncryptedFileStore(context: Context, storage: AccountStorage) : LocalPersistence {
+    private val file = AtomicFile(File(context.applicationContext.noBackupFilesDir, storage.cacheFile))
+    private val cipher = KeystoreCipher(storage.cacheKeyAlias, storage.cacheAad.toByteArray())
+
+    /** Set on logout: a sync still finishing in the background must not write the file again. */
+    @Volatile private var closed = false
 
     override suspend fun load(): LocalData? = withContext(Dispatchers.IO) {
         if (!file.baseFile.exists()) return@withContext null
@@ -35,6 +38,7 @@ class EncryptedFileStore(context: Context) : LocalPersistence {
     }
 
     override suspend fun save(data: LocalData) = withContext(Dispatchers.IO) {
+        if (closed) return@withContext
         val blob = cipher.encrypt(toJson(data).toString().toByteArray(Charsets.UTF_8))
         val out = file.startWrite()
         try {
@@ -47,6 +51,7 @@ class EncryptedFileStore(context: Context) : LocalPersistence {
     }
 
     override suspend fun clear() = withContext(Dispatchers.IO) {
+        closed = true
         file.delete()
         cipher.deleteKey()
     }

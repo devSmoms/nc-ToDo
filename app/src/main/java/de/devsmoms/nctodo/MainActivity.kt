@@ -51,22 +51,35 @@ class MainActivity : ComponentActivity() {
         handleDeepLink(intent)
     }
 
-    /** Opens the list (and task) a widget was tapped on. Only values produced by [intent] are accepted. */
+    /**
+     * Opens the account, list and task a widget or notification refers to.
+     * Only values produced by [intent] are accepted; unknown accounts are ignored.
+     */
     private fun handleDeepLink(intent: Intent?) {
-        val selection = Selection.decode(intent?.getStringExtra(EXTRA_SELECTION)) ?: return
-        vm.openFromWidget(selection, intent?.getStringExtra(EXTRA_TASK))
+        val account = intent?.getStringExtra(EXTRA_ACCOUNT)
+        val selection = Selection.decode(intent?.getStringExtra(EXTRA_SELECTION))
+        if (account == null && selection == null) return
+        vm.openDeepLink(account, selection, intent?.getStringExtra(EXTRA_TASK))
     }
 
     companion object {
+        private const val EXTRA_ACCOUNT = "account"
         private const val EXTRA_SELECTION = "selection"
         private const val EXTRA_TASK = "task"
 
-        fun intent(context: Context, selection: Selection, taskUrl: String? = null): Intent =
+        fun intent(context: Context, account: String?, selection: Selection? = null, taskUrl: String? = null): Intent =
             Intent(context, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                .putExtra(EXTRA_SELECTION, selection.encode())
-                .apply { if (taskUrl != null) putExtra(EXTRA_TASK, taskUrl) }
+                .apply {
+                    if (account != null) putExtra(EXTRA_ACCOUNT, account)
+                    if (selection != null) putExtra(EXTRA_SELECTION, selection.encode())
+                    if (taskUrl != null) putExtra(EXTRA_TASK, taskUrl)
+                }
                 // Unique data so the system does not merge the PendingIntents of different rows.
-                .setData(Uri.parse("nctodo://open/" + Uri.encode(selection.encode() + "|" + taskUrl.orEmpty())))
+                .setData(
+                    Uri.parse(
+                        "nctodo://open/" + Uri.encode(account.orEmpty() + "|" + selection?.encode().orEmpty() + "|" + taskUrl.orEmpty()),
+                    ),
+                )
     }
 }

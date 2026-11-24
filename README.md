@@ -5,6 +5,7 @@ Android-App für Nextcloud-Aufgaben (CalDAV/VTODO), bedient sich ähnlich wie Mi
 ## Funktionen
 
 - Anmeldung per CalDAV (Server-URL, Benutzername, App-Passwort), automatische Erkennung von `/remote.php/dav` bzw. `/.well-known/caldav`
+- **Mehrere Konten**, auch auf verschiedenen Servern: Tipp auf Avatar oder Namen oben im Menü öffnet die Kontoauswahl (wechseln, hinzufügen, abmelden). Jedes Konto hat eigene Listen, Offline-Daten und Einstellungen. Beim Abmelden werden alle Daten dieses Kontos vom Gerät gelöscht. Widgets zeigen ein wählbares Konto, das Schnell-Anlegen bietet die Listen aller Konten an.
 - Intelligente Listen: **Mein Tag** (heute fällig oder überfällig), **Wichtig** (Stern), **Geplant** (mit Fälligkeitsdatum), **Aufgaben** (alle)
 - Eigene Listen anlegen, umbenennen, einfärben, löschen
 - Listen teilen mit **Nextcloud-Benutzern** des eigenen Servers: **Nur lesen** oder **Kann bearbeiten**, umschaltbar, entfernbar
@@ -46,7 +47,7 @@ Voraussetzungen: Android 8.0+, Nextcloud mit gültigem HTTPS-Zertifikat (z. B. L
 
 ## Sicherheit
 
-- **Zugangsdaten** werden mit AES-256-GCM verschlüsselt. Der Schlüssel liegt im Android Keystore (Hardware/StrongBox, falls vorhanden) und kann nicht ausgelesen oder exportiert werden. Die verschlüsselten Daten liegen im privaten App-Speicher.
+- **Zugangsdaten** werden mit AES-256-GCM verschlüsselt, mit einem eigenen Schlüssel pro Konto. Der Schlüssel liegt im Android Keystore (Hardware/StrongBox, falls vorhanden) und kann nicht ausgelesen oder exportiert werden. Die verschlüsselten Daten liegen im privaten App-Speicher.
 - **Kein Backup**: `allowBackup=false` und Data-Extraction-Rules verhindern, dass Daten per Cloud-Backup oder Geräteumzug das Gerät verlassen.
 - **Nur HTTPS**, TLS 1.2+, keine Klartext-Verbindungen, keine Weiterleitung von HTTPS auf HTTP, nur System-Zertifizierungsstellen (keine vom Nutzer installierten CAs).
 - Das Passwort wird **nur an den angemeldeten Server** geschickt; Verweise des Servers auf fremde Adressen werden abgelehnt.

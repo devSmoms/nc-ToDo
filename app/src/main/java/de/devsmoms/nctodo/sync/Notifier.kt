@@ -37,13 +37,14 @@ class Notifier(private val context: Context) {
         return manager.areNotificationsEnabled()
     }
 
-    fun showDue(titles: List<String>) {
+    /** [label] names the account when there are several (shown as sub text, not on the lock screen). */
+    fun showDue(account: String, label: String?, titles: List<String>) {
         if (titles.isEmpty() || !canNotify()) return
         val title = if (titles.size == 1) "1 Aufgabe für heute" else "${titles.size} Aufgaben für heute"
-        notify(ID_DUE, CHANNEL_DUE, title, titles)
+        notify(account, label, ID_DUE, CHANNEL_DUE, title, titles)
     }
 
-    fun showShared(changes: List<SharedChange>) {
+    fun showShared(account: String, label: String?, changes: List<SharedChange>) {
         if (changes.isEmpty() || !canNotify()) return
         changes.forEach { c ->
             val parts = buildList {
@@ -52,16 +53,27 @@ class Notifier(private val context: Context) {
             }
             val lines = c.added.map { "+ $it" } + c.completed.map { "✓ $it" }
             // One notification per list; a newer one replaces the older.
-            notify(ID_SHARED_BASE + (c.listName.hashCode() and 0xFFFF), CHANNEL_SHARED, "${c.listName}: ${parts.joinToString(", ")}", lines)
+            notify(account, label, ID_SHARED_BASE + (c.listName.hashCode() and 0xFFFF), CHANNEL_SHARED, "${c.listName}: ${parts.joinToString(", ")}", lines)
         }
     }
 
     fun cancelAll() = manager.cancelAll()
 
-    private fun notify(id: Int, channel: String, title: String, lines: List<String>) {
+    /** Removes the notifications of one account (they are tagged with its id). */
+    fun cancelAccount(account: String) {
+        val nm = context.getSystemService(NotificationManager::class.java) ?: return
+        runCatching {
+            nm.activeNotifications.filter { it.tag == tag(account) }.forEach { manager.cancel(it.tag, it.id) }
+        }
+    }
+
+    private fun tag(account: String) = "account:$account"
+
+    private fun notify(account: String, label: String?, id: Int, channel: String, title: String, lines: List<String>) {
+        // Tapping opens the app in the account the notification belongs to.
         val intent = PendingIntent.getActivity(
-            context, 0,
-            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            context, account.hashCode(),
+            MainActivity.intent(context, account),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val style = NotificationCompat.InboxStyle().also { s -> lines.take(6).forEach { s.addLine(it) } }
@@ -74,6 +86,7 @@ class Notifier(private val context: Context) {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(lines.take(3).joinToString(", "))
+            .apply { if (label != null) setSubText(label) }
             .setStyle(style)
             .setContentIntent(intent)
             .setAutoCancel(true)
@@ -81,7 +94,7 @@ class Notifier(private val context: Context) {
             .setPublicVersion(public)
             .build()
         try {
-            manager.notify(id, n)
+            manager.notify(tag(account), id, n)
         } catch (_: SecurityException) {
             // Permission revoked in the meantime.
         }

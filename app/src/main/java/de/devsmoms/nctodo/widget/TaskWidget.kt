@@ -64,12 +64,16 @@ import de.devsmoms.nctodo.ui.selectionTitle
 import de.devsmoms.nctodo.ui.tasksForSelection
 import java.time.LocalDate
 
+/** Per-widget setting: the account whose tasks it shows (missing = widget from before 2.2: first account). */
+val WidgetAccountKey = stringPreferencesKey("account")
+
 /** Per-widget setting: which list or smart view it shows (encoded [Selection]). */
 val WidgetSelectionKey = stringPreferencesKey("selection")
 
 /** Per-widget setting: every tap opens the app (no checking off / quick add in the widget). */
 val WidgetOpenAppKey = booleanPreferencesKey("openAppOnTap")
 private val TaskUrlKey = ActionParameters.Key<String>("taskUrl")
+private val AccountKey = ActionParameters.Key<String>("account")
 
 /**
  * Home screen widget: open tasks of one list or smart view. Tasks can be checked off
@@ -82,14 +86,21 @@ class TaskWidget : GlanceAppWidget() {
         val c = (context.applicationContext as NcTodoApp).container
         c.awaitLoaded()
         provideContent {
-            val allData by c.repository.data.collectAsState()
-            val settings by c.settings.collectAsState()
-            val data = allData.forDisplay(settings.hideDeckLists)
-            val account by c.account.collectAsState()
+            val sessions by c.sessions.collectAsState()
+            val accountId = currentState(WidgetAccountKey)
+            val session = if (accountId == null) sessions.firstOrNull() else sessions.firstOrNull { it.id == accountId }
             val selection = Selection.decode(currentState(WidgetSelectionKey)) ?: Selection.DEFAULT
             val openAppOnTap = currentState(WidgetOpenAppKey) ?: false
             GlanceTheme {
-                WidgetContent(context, account != null, selection, data, openAppOnTap)
+                if (session == null) {
+                    // Logged out (or this widget's account was removed): never show data of another account.
+                    val hint = if (accountId != null && sessions.isNotEmpty()) "Konto abgemeldet – Widget neu einrichten" else "In NC Todo anmelden"
+                    WidgetContent(context, null, hint, selection, LocalData(), openAppOnTap)
+                } else {
+                    val allData by session.repository.data.collectAsState()
+                    val settings by session.settings.collectAsState()
+                    WidgetContent(context, session.id, null, selection, allData.forDisplay(settings.hideDeckLists), openAppOnTap)
+                }
             }
         }
     }
@@ -113,8 +124,9 @@ class ToggleTaskAction : ActionCallback {
         val url = parameters[TaskUrlKey] ?: return
         val c = (context.applicationContext as NcTodoApp).container
         c.awaitLoaded()
-        val item = c.repository.data.value.task(url) ?: return
-        c.repository.updateTask(url, TaskFields.completed(!item.todo.completed))
+        val repo = c.session(parameters[AccountKey])?.repository ?: return
+        val item = repo.data.value.task(url) ?: return
+        repo.updateTask(url, TaskFields.completed(!item.todo.completed))
         TaskWidget().update(context, glanceId)
     }
 }
@@ -123,13 +135,22 @@ private fun colorOf(hex: String?): ColorProvider? =
     hex?.let { runCatching { ColorProvider(Color(android.graphics.Color.parseColor(it))) }.getOrNull() }
 
 @Composable
-private fun WidgetContent(context: Context, loggedIn: Boolean, selection: Selection, data: LocalData, openAppOnTap: Boolean) {
+private fun WidgetContent(
+    context: Context,
+    /** null = no account to show; [loggedOutHint] explains why. */
+    account: String?,
+    loggedOutHint: String?,
+    selection: Selection,
+    data: LocalData,
+    openAppOnTap: Boolean,
+) {
+    val loggedIn = account != null
     val list = (selection as? Selection.OfList)?.let { data.list(it.url) }
     val accent = colorOf(list?.color) ?: GlanceTheme.colors.primary
     val muted = GlanceTheme.colors.onSurfaceVariant
     val tasks = tasksForSelection(selection, data.tasks).filter { !it.todo.completed }.take(50)
     val target = if (list != null) list.takeIf { it.canWrite } else data.lists.defaultTarget()
-    val openApp = actionStartActivity(MainActivity.intent(context, selection))
+    val openApp = actionStartActivity(MainActivity.intent(context, account, selection))
 
     // In "open app" mode the whole widget (and every row, since list rows swallow taps) opens the app.
     val rootModifier = GlanceModifier.fillMaxSize().background(GlanceTheme.colors.widgetBackground).cornerRadius(20.dp)
@@ -149,14 +170,14 @@ private fun WidgetContent(context: Context, loggedIn: Boolean, selection: Select
                     contentDescription = "Neue Aufgabe",
                     colorFilter = ColorFilter.tint(accent),
                     modifier = GlanceModifier.size(36.dp).padding(6.dp)
-                        .clickable(actionStartActivity(QuickAddActivity.intent(context, list?.url))),
+                        .clickable(actionStartActivity(QuickAddActivity.intent(context, account, list?.url))),
                 )
             }
         }
         Spacer(GlanceModifier.height(4.dp))
         when {
             !loggedIn -> Text(
-                "In NC Todo anmelden",
+                loggedOutHint ?: "In NC Todo anmelden",
                 style = TextStyle(color = muted, fontSize = 14.sp),
                 modifier = GlanceModifier.clickable(openApp).padding(vertical = 8.dp),
             )
@@ -167,7 +188,7 @@ private fun WidgetContent(context: Context, loggedIn: Boolean, selection: Select
             )
             else -> LazyColumn(GlanceModifier.fillMaxSize()) {
                 items(tasks, itemId = { it.url.hashCode().toLong() }) { task ->
-                    WidgetTaskRow(context, task, selection, data, accent, if (openAppOnTap) openApp else null)
+                    WidgetTaskRow(context, account!!, task, selection, data, accent, if (openAppOnTap) openApp else null)
                 }
             }
         }
@@ -177,6 +198,7 @@ private fun WidgetContent(context: Context, loggedIn: Boolean, selection: Select
 @Composable
 private fun WidgetTaskRow(
     context: Context,
+    account: String,
     task: TaskItem,
     selection: Selection,
     data: LocalData,
@@ -198,7 +220,7 @@ private fun WidgetTaskRow(
         if (rowAction == null) {
             CheckBox(
                 checked = false,
-                onCheckedChange = if (writable) actionRunCallback<ToggleTaskAction>(actionParametersOf(TaskUrlKey to task.url)) else null,
+                onCheckedChange = if (writable) actionRunCallback<ToggleTaskAction>(actionParametersOf(TaskUrlKey to task.url, AccountKey to account)) else null,
             )
         } else {
             // Static box: a real checkbox would toggle visually on tap.
@@ -209,7 +231,7 @@ private fun WidgetTaskRow(
             )
         }
         val textModifier = GlanceModifier.defaultWeight()
-            .let { if (rowAction == null) it.clickable(actionStartActivity(MainActivity.intent(context, selection, task.url))) else it }
+            .let { if (rowAction == null) it.clickable(actionStartActivity(MainActivity.intent(context, account, selection, task.url))) else it }
         Column(textModifier) {
             Text(task.todo.summary.ifBlank { "(ohne Titel)" }, maxLines = 2, style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 14.sp))
             if (meta.isNotEmpty()) {

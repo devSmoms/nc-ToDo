@@ -58,9 +58,10 @@ data class Settings(
     }
 }
 
-/** Non-sensitive app preferences. */
-class SettingsStore(context: Context) {
-    private val prefs = context.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
+/** Non-sensitive preferences of one account. */
+class SettingsStore(context: Context, private val prefsName: String) {
+    private val app = context.applicationContext
+    private val prefs = app.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
     private val _settings = MutableStateFlow(read())
     val settings: StateFlow<Settings> = _settings
 
@@ -108,8 +109,10 @@ class SettingsStore(context: Context) {
         get() = prefs.getString("lastSelection", null)
         set(value) { prefs.edit().putString("lastSelection", value).apply() }
 
-    fun reset() {
-        prefs.edit().clear().apply()
+    /** Deletes all settings of this account including the preferences file. */
+    fun delete() {
+        prefs.edit().clear().commit()
+        app.deleteSharedPreferences(prefsName)
         _settings.value = Settings()
     }
 
