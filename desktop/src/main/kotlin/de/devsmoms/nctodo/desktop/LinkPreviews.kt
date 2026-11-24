@@ -1,7 +1,5 @@
 package de.devsmoms.nctodo.desktop
 
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.toComposeImageBitmap
 import de.devsmoms.nctodo.ical.TodoMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -9,12 +7,13 @@ import okhttp3.ConnectionSpec
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.jetbrains.skia.Image
+import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
 import java.util.Collections
 import java.util.concurrent.TimeUnit
 
 /** Title, website and picture of a link. */
-data class LinkInfo(val title: String?, val site: String, val image: ImageBitmap?)
+data class LinkInfo(val title: String?, val site: String, val image: BufferedImage?)
 
 /**
  * Loads link previews with its own HTTP client: no Nextcloud credentials, HTTPS only,
@@ -79,7 +78,7 @@ object LinkPreviews {
         }.getOrDefault(plain)
     }
 
-    private fun loadImage(url: String): ImageBitmap? = runCatching {
+    private fun loadImage(url: String): BufferedImage? = runCatching {
         http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
             if (!resp.isSuccessful) return null
             val src = resp.body?.source() ?: return null
@@ -88,7 +87,8 @@ object LinkPreviews {
         }
     }.getOrNull()
 
-    private fun decode(bytes: ByteArray): ImageBitmap? = runCatching { Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
+    /** PNG, JPEG, GIF and BMP (what Java can read); other formats just show no picture. */
+    private fun decode(bytes: ByteArray): BufferedImage? = runCatching { ImageIO.read(bytes.inputStream()) }.getOrNull()
 
     private fun meta(html: String, property: String): String? {
         val p = Regex.escape(property)

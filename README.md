@@ -88,7 +88,7 @@ Dabei legt Nextcloud automatisch ein eigenes App-Passwort an. Es erscheint unter
 
 <img src="docs/screenshots/desktop.png" width="720" alt="Desktop-App unter Windows">
 
-Unter **[Releases](../../releases)** gibt es neben der APK auch einen Windows-Installer (`.msi`) und ein Paket für Debian/Ubuntu (`.deb`). Die Desktop-App nutzt dieselbe Sync-Logik wie Android und ist wie Microsoft To Do aufgebaut: Listen links, Aufgaben in der Mitte, Details rechts.
+Unter **[Releases](../../releases)** gibt es neben der APK auch einen Windows-Installer (`.msi`) und ein Paket für Debian/Ubuntu (`.deb`). Die Desktop-App nutzt dieselbe Sync-Logik wie Android und ist wie Microsoft To Do aufgebaut: Listen links, Aufgaben in der Mitte, Details rechts. Die Oberfläche ist mit Swing und FlatLaf gebaut, damit Windows die Schrift so scharf zeichnet wie in anderen Programmen.
 
 - Anmeldung im Browser wie auf Android, Offline-Speicher verschlüsselt
 - Zugangsdaten im System-Schlüsselbund: Windows-Datenschutz-API (DPAPI), unter Linux der Schlüsselbund des Desktops über `secret-tool` – dafür muss das Paket **`libsecret-tools`** installiert sein (`sudo apt install libsecret-tools`)
@@ -140,7 +140,7 @@ core/      gemeinsamer Code ohne Android – läuft auch auf dem Desktop
   dav/     WebDAV/CalDAV-XML, HTTP-Client, Principal-Helfer
   data/    CalDAV-Zugriff, Modelle, Login Flow v2, Konten-Speichernamen
   sync/    Offline-Sync-Engine (Warteschlange, Konfliktauflösung)
-desktop/   Desktop-App für Windows und Linux (Compose Multiplatform)
+desktop/   Desktop-App für Windows und Linux (Swing mit FlatLaf)
 app/       Android-App
   data/    verschlüsselte Zugangsdaten und Offline-Speicher (Android Keystore), Einstellungen
   sync/    WorkManager-Jobs, Benachrichtigungen

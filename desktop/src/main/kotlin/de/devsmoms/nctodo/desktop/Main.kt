@@ -1,96 +1,28 @@
 package de.devsmoms.nctodo.desktop
 
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.application
-import androidx.compose.ui.window.rememberWindowState
-import org.jetbrains.skia.Image
+import de.devsmoms.nctodo.desktop.ui.MainFrame
+import de.devsmoms.nctodo.desktop.ui.Theme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.swing.Swing
+import javax.swing.SwingUtilities
 
-/** Accent like the Android app (Microsoft To Do blue). */
-val AccentBlue = Color(0xFF2564CF)
-
-fun main() = application {
-    val icon = remember {
-        Thread.currentThread().contextClassLoader.getResourceAsStream("icon.png")?.use {
-            BitmapPainter(Image.makeFromEncoded(it.readBytes()).toComposeImageBitmap())
-        }
-    }
-    val windowState = rememberWindowState(size = DpSize(1200.dp, 800.dp))
-    val shortcuts = remember { Shortcuts() }
-    // Created before the theme so the theme can follow the settings.
-    val scope = rememberCoroutineScope()
-    val state = remember { AppState(scope) }
-    Window(
-        onCloseRequest = ::exitApplication,
-        title = "NC Todo",
-        icon = icon,
-        state = windowState,
-        onPreviewKeyEvent = { e ->
-            if (e.type != KeyEventType.KeyDown || !e.isCtrlPressed) return@Window false
-            when (e.key) {
-                Key.N -> { shortcuts.newTask(); true }
-                Key.F -> { shortcuts.search(); true }
-                Key.R -> { shortcuts.sync(); true }
-                else -> false
-            }
-        },
-    ) {
-        window.minimumSize = java.awt.Dimension(720, 480)
-        NcTodoTheme(state.settings.theme) {
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                when {
-                    !state.ready -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    state.credentials == null -> LoginView(state)
-                    else -> MainView(state, shortcuts)
-                }
-            }
-        }
+/**
+ * NC Todo for Windows and Linux. The window is plain Swing (FlatLaf look): Java2D draws text
+ * with the system's font smoothing on whole pixels, which is sharper than Skia-based UIs.
+ */
+fun main() {
+    // Must be set before Swing starts: greyscale text smoothing (like browsers) or the system's (ClearType).
+    val startSettings = runCatching { DesktopSettingsStore(DesktopPaths.dataDir.resolve("settings.properties")).load() }.getOrDefault(DesktopSettings())
+    if (startSettings.grayscaleText) System.setProperty("awt.useSystemAAFontSettings", "on")
+    // Native window title bar of FlatLaf on Windows 10/11 (matches light/dark).
+    System.setProperty("flatlaf.useWindowDecorations", "true")
+    System.setProperty("flatlaf.menuBarEmbedded", "false")
+    SwingUtilities.invokeLater {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Swing)
+        val state = AppState(scope)
+        Theme.install(state.settings.theme, state.settings.fontSize)
+        MainFrame(state, scope).isVisible = true
     }
 }
-
-/** Keyboard shortcuts of the window, connected by [MainView]. */
-class Shortcuts {
-    var newTask: () -> Unit = {}
-    var search: () -> Unit = {}
-    var sync: () -> Unit = {}
-}
-
-@Composable
-fun NcTodoTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
-    val dark = when (mode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
-    MaterialTheme(
-        colorScheme = if (dark) darkColorScheme(primary = Color(0xFF8AB4F8)) else lightColorScheme(primary = AccentBlue),
-        content = content,
-    )
-}
-
-/** "#RRGGBB" list colour; falls back to the accent. */
-fun parseColor(hex: String): Color = runCatching {
-    Color(0xFF000000 or hex.removePrefix("#").take(6).toLong(16))
-}.getOrDefault(AccentBlue)

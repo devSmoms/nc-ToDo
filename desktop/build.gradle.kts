@@ -34,8 +34,10 @@ sourceSets.main { resources.srcDir(versionResource) }
 
 dependencies {
     implementation(project(":core"))
+    // UI: Swing with FlatLaf (sharp system text rendering). From Compose only the snapshot state
+    // (used by AppState) and the Material icons, drawn into Swing as vectors.
+    implementation("com.formdev:flatlaf:3.6.1")
     implementation(compose.desktop.currentOs)
-    implementation(compose.material3)
     implementation(compose.materialIconsExtended)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
     // Windows: protect secrets with DPAPI (Apache-2.0 / LGPL-2.1 dual licensed; used under Apache-2.0).
@@ -45,6 +47,8 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "de.devsmoms.nctodo.desktop.MainKt"
+        // FlatLaf loads its native library (window title bar on Windows).
+        jvmArgs += listOf("--enable-native-access=ALL-UNNAMED")
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Deb)
             packageName = "NC Todo"
