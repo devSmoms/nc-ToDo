@@ -167,12 +167,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val activeView = c.active.flatMapLatest { s: AccountSession? ->
         if (s == null) flowOf(ActiveView(null, LocalData(), SyncStatus(), Settings()))
-        else combine(s.credentials, s.repository.data, s.repository.status, s.settings) { cr, d, st, se -> ActiveView(cr, d, st, se) }
+        else combine(s.shownCredentials, s.repository.data, s.repository.status, s.settings) { cr, d, st, se -> ActiveView(cr, d, st, se) }
     }
 
     private val accountsFlow = c.sessions.flatMapLatest { list ->
         if (list.isEmpty()) flowOf(emptyList())
-        else combine(list.map { s -> combine(s.credentials, s.repository.data) { cr, d -> AccountInfo(s.id, cr, d.pending.size) } }) { it.toList() }
+        else combine(list.map { s -> combine(s.shownCredentials, s.repository.data) { cr, d -> AccountInfo(s.id, cr, d.pending.size) } }) { it.toList() }
     }
 
     val state: StateFlow<UiState> = combine(activeView, accountsFlow, local, c.ready, c.active) { view, accounts, ui, ready, active ->
@@ -291,7 +291,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val wasActive = c.active.value?.id == id
             c.logout(id)
             if (wasActive) resetForAccount()
-            c.active.value?.let { message("Abgemeldet – jetzt aktiv: ${it.credentials.value.displayName}") }
+            c.active.value?.let { message("Abgemeldet – jetzt aktiv: ${it.displayName()}") }
         }
     }
 
@@ -328,6 +328,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun back() = local.update { it.copy(screen = Screen.Main) }
 
     fun refresh() = c.syncNow()
+
+    /** Name of the active account as it comes from Nextcloud (shown when no own name is set). */
+    fun serverAccountName(): String = c.active.value?.credentials?.value?.displayName.orEmpty()
 
     /** Settings belong to the active account. */
     fun updateSettings(change: (Settings) -> Settings) {

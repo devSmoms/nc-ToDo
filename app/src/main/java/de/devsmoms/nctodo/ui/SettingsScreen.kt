@@ -93,6 +93,8 @@ import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -164,6 +166,7 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
     var pickTime by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
     var accountDialog by remember { mutableStateOf(false) }
+    var editName by remember { mutableStateOf(false) }
     var showLicense by remember { mutableStateOf(false) }
     var showLibraries by remember { mutableStateOf(false) }
     var licenseText by remember { mutableStateOf<String?>(null) }
@@ -282,6 +285,19 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
 
                 SettingsPage.APPEARANCE -> {
                     val c = page.color
+                    item { SectionLabel("Konto") }
+                    item {
+                        SettingsCard {
+                            SettingRow(
+                                icon = Icons.Outlined.Badge, tint = c,
+                                title = "Anzeigename",
+                                subtitle = if (s.accountName.isBlank()) "Name aus Nextcloud" else "Eigener Name",
+                                onClick = { editName = true },
+                                trailing = { ValueText(state.credentials?.displayName.orEmpty()) },
+                            )
+                        }
+                        Hint("Nur für die Anzeige in NC Todo auf diesem Gerät – in Nextcloud ändert sich nichts.")
+                    }
                     item { SectionLabel("Design") }
                     item {
                         SettingsCard {
@@ -550,6 +566,16 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
             state.activeAccount?.let(vm::logout)
         }
     }
+    if (editName) {
+        AccountNameDialog(
+            current = s.accountName,
+            serverName = vm.serverAccountName(),
+            onDismiss = { editName = false },
+        ) { name ->
+            editName = false
+            vm.updateSettings { it.copy(accountName = name) }
+        }
+    }
     if (accountDialog) {
         AccountDialog(
             state = state,
@@ -563,6 +589,43 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
 }
 
 // ---------------------------------------------------------------- page parts
+
+/** Own display name for the account; empty restores the name from Nextcloud. */
+@Composable
+private fun AccountNameDialog(current: String, serverName: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var text by remember { mutableStateOf(current.ifBlank { serverName }) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Anzeigename") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(40) },
+                    label = { Text("Name in NC Todo") },
+                    placeholder = { Text(serverName) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    "Name aus Nextcloud: $serverName",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            // Saving the Nextcloud name itself (or nothing) means "no own name".
+            TextButton(onClick = { onSave(text.trim().takeIf { it != serverName }.orEmpty()) }) { Text("Speichern") }
+        },
+        dismissButton = {
+            Row {
+                if (current.isNotBlank()) TextButton(onClick = { onSave("") }) { Text("Zurücksetzen") }
+                TextButton(onClick = onDismiss) { Text("Abbrechen") }
+            }
+        },
+    )
+}
 
 @Composable
 private fun PageHeader(title: String, color: Color, subtitle: String?) {

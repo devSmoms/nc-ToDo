@@ -152,7 +152,7 @@ class AppContainer(context: Context) {
 
     /** Display name used in notifications and messages; only needed with several accounts. */
     fun labelFor(session: AccountSession): String? =
-        if (_sessions.value.size > 1) session.credentials.value.displayName else null
+        if (_sessions.value.size > 1) session.displayName() else null
 
     // ---------------------------------------------------------------- accounts
 

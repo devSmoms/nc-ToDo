@@ -35,6 +35,8 @@ data class Settings(
     val confirmRemovals: Boolean = true,
     /** Hide the lists Nextcloud Deck creates for its boards ("Deck: …"). */
     val hideDeckLists: Boolean = true,
+    /** Own name for this account shown in the app; blank = name from Nextcloud. Only on this device. */
+    val accountName: String = "",
     /** List groups collapsed in the menu. */
     val collapsedGroups: Set<String> = emptySet(),
     /** Groups created in the menu that contain no list yet (only kept on this device). */
@@ -85,6 +87,7 @@ class SettingsStore(context: Context, private val prefsName: String) {
             linkPreviews = prefs.getBoolean("linkPreviews", d.linkPreviews),
             confirmRemovals = prefs.getBoolean("confirmRemovals", d.confirmRemovals),
             hideDeckLists = prefs.getBoolean("hideDeckLists", d.hideDeckLists),
+            accountName = prefs.getString("accountName", null) ?: d.accountName,
             collapsedGroups = prefs.getStringSet("collapsedGroups", null)?.toSet() ?: d.collapsedGroups,
             emptyGroups = prefs.getStringSet("emptyGroups", null)?.toSet() ?: d.emptyGroups,
         )
@@ -106,6 +109,7 @@ class SettingsStore(context: Context, private val prefsName: String) {
             .putBoolean("linkPreviews", s.linkPreviews)
             .putBoolean("confirmRemovals", s.confirmRemovals)
             .putBoolean("hideDeckLists", s.hideDeckLists)
+            .putString("accountName", s.accountName.trim())
             // Always a fresh set: SharedPreferences must not hold on to a set it handed out.
             .putStringSet("collapsedGroups", HashSet(s.collapsedGroups))
             .putStringSet("emptyGroups", HashSet(s.emptyGroups))

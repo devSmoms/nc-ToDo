@@ -50,7 +50,7 @@ Android-App für die Aufgaben deiner Nextcloud (CalDAV/VTODO) – bedient sich �
 - **Anmeldung im Browser** (Nextcloud Login Flow v2): Adresse eingeben, im Browser bei der eigenen Nextcloud anmelden – auch mit Zwei-Faktor oder Single Sign-On – und „Zugriff gewähren“. Nextcloud erstellt dabei automatisch ein eigenes App-Passwort für NC Todo. Alternativ Benutzername und App-Passwort von Hand eingeben
 - Listen mit **Nextcloud-Benutzern** teilen: **Nur lesen** oder **Kann bearbeiten**, jederzeit änderbar
 - Mit dir geteilte Listen erscheinen automatisch (schreibgeschützte mit Schloss-Symbol) und lassen sich verlassen
-- **Mehrere Konten**, auch auf verschiedenen Servern: Tipp auf Avatar oder Namen oben im Menü → wechseln, hinzufügen, abmelden. Jedes Konto hat eigene Listen, Offline-Daten und Einstellungen
+- **Mehrere Konten**, auch auf verschiedenen Servern: Tipp auf Avatar oder Namen oben im Menü → wechseln, hinzufügen, abmelden. Jedes Konto hat eigene Listen, Offline-Daten und Einstellungen. Unter *Einstellungen → Darstellung → Anzeigename* kann jedes Konto einen eigenen Namen bekommen (z. B. „Arbeit“), der nur in der App angezeigt wird
 
 ### Startbildschirm und System
 - **Widgets**: offene Aufgaben einer wählbaren Liste oder Ansicht, Abhaken direkt im Widget, „+“ zum schnellen Anlegen; bei mehreren Konten ist das Konto wählbar

@@ -93,7 +93,7 @@ class QuickAddActivity : ComponentActivity() {
                 key(s.id) {
                     val data by s.repository.data.collectAsState()
                     val hideDeck = s.settings.collectAsState().value.hideDeckLists
-                    val label = if (sessions.size > 1) s.credentials.collectAsState().value.displayName else null
+                    val label = if (sessions.size > 1) s.shownCredentials.collectAsState(s.credentials.value).value.displayName else null
                     data.forDisplay(hideDeck).lists.filter { it.canWrite }.map { QuickTarget(s.id, label, it) }
                 }
             }

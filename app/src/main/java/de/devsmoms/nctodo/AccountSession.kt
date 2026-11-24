@@ -14,7 +14,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -41,6 +43,14 @@ class AccountSession private constructor(
     val scope = CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]))
 
     val settings: StateFlow<Settings> = settingsStore.settings
+
+    /** Credentials as shown in the app: the own account name (if set) replaces the Nextcloud name. */
+    val shownCredentials: Flow<Credentials> = combine(credentials, settings) { c, s -> c.copy(displayName = shownName(c, s)) }
+
+    /** Name shown for this account right now. */
+    fun displayName(): String = shownName(credentials.value, settings.value)
+
+    private fun shownName(c: Credentials, s: Settings) = s.accountName.trim().ifEmpty { c.displayName }
     fun updateSettings(change: (Settings) -> Settings) = settingsStore.update(change)
 
     var lastSelection: String?

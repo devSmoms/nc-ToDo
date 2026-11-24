@@ -132,9 +132,9 @@ class WidgetConfigActivity : ComponentActivity() {
                                 sessions.forEach { acc ->
                                     val creds = acc.credentials.value
                                     ListItem(
-                                        headlineContent = { Text(creds.displayName) },
+                                        headlineContent = { Text(acc.displayName()) },
                                         supportingContent = { Text("${creds.username} · ${serverLabel(creds.serverUrl)}") },
-                                        leadingContent = { AccountAvatar(creds.displayName, acc.id, 36.dp) },
+                                        leadingContent = { AccountAvatar(acc.displayName(), acc.id, 36.dp) },
                                         trailingContent = { RadioButton(selected = acc.id == session?.id, onClick = { account = acc.id }) },
                                         modifier = Modifier.clickable { account = acc.id },
                                     )
