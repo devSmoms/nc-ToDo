@@ -7,10 +7,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxState
-import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.ui.focus.onFocusChanged
@@ -100,6 +96,20 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.delay
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import kotlin.math.abs
+import kotlin.math.sign
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -394,7 +404,7 @@ private fun TaskListContent(state: UiState, title: String, accent: Color, list: 
                 )
             }
         }
-        items(open, key = { it.url }) { SwipeToDelete(it, state, vm) { TaskRow(it, state, accent, vm) } }
+        items(open, key = { it.url }) { SwipeToDelete(it, state, vm, taskRowAnimation()) { TaskRow(it, state, accent, vm) } }
         if (done.isNotEmpty()) {
             item {
                 TextButton(onClick = { showDone = !showDone }, modifier = Modifier.padding(horizontal = 8.dp)) {
@@ -403,7 +413,7 @@ private fun TaskListContent(state: UiState, title: String, accent: Color, list: 
                     Text("Erledigt (${done.size})")
                 }
             }
-            if (showDone) items(done, key = { it.url }) { SwipeToDelete(it, state, vm) { TaskRow(it, state, accent, vm) } }
+            if (showDone) items(done, key = { it.url }) { SwipeToDelete(it, state, vm, taskRowAnimation()) { TaskRow(it, state, accent, vm) } }
         }
     }
 }
@@ -411,35 +421,71 @@ private fun TaskListContent(state: UiState, title: String, accent: Color, list: 
 /** Share of the row width that has to be swiped before a task is deleted. */
 private const val SWIPE_DELETE_FRACTION = 0.5f
 
-/** Swiping a task to the left or right deletes it (with undo); disabled in read-only lists. */
+/** Fly-out after a swipe: starts slowly and accelerates off the screen. */
+private const val SWIPE_FLY_OUT_MS = 220
+
+/** Placement animation of the rows below when a task disappears (or comes back via undo). */
+private fun LazyItemScope.taskRowAnimation(): Modifier = Modifier.animateItem(
+    fadeInSpec = tween(200),
+    placementSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+    fadeOutSpec = null,
+)
+
+/**
+ * Swiping a task to the left or right deletes it (with undo); disabled in read-only lists.
+ * Released past half of the width, the row accelerates out to that side, then it is removed and
+ * the rows below slide up. Released earlier, it springs back. A quick flick never deletes.
+ */
 @Composable
-private fun SwipeToDelete(item: TaskItem, state: UiState, vm: AppViewModel, content: @Composable () -> Unit) {
+private fun SwipeToDelete(
+    item: TaskItem,
+    state: UiState,
+    vm: AppViewModel,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
     val writable = state.list(item.listUrl)?.canWrite == true
-    // The state is needed inside its own confirm callback to check how far the row was moved.
-    val holder = remember { arrayOfNulls<SwipeToDismissBoxState>(1) }
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            // Delete only if the row was dragged past half of its width – a quick flick is not enough.
-            val farEnough = (holder[0]?.progress ?: 0f) >= SWIPE_DELETE_FRACTION
-            if (value != SwipeToDismissBoxValue.Settled && farEnough) {
-                vm.swipeDelete(item)
-                true
-            } else {
-                false
-            }
-        },
-        positionalThreshold = { totalDistance -> totalDistance * SWIPE_DELETE_FRACTION },
-    )
-    holder[0] = dismissState
-    val armed = dismissState.targetValue != SwipeToDismissBoxValue.Settled && dismissState.progress >= SWIPE_DELETE_FRACTION
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = writable,
-        enableDismissFromEndToStart = writable,
-        backgroundContent = {
-            val fromStart = dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val offset = remember { Animatable(0f) }
+    var width by remember { mutableIntStateOf(0) }
+    var leaving by remember { mutableStateOf(false) }
+    val threshold = width * SWIPE_DELETE_FRACTION
+    val armed = width > 0 && abs(offset.value) >= threshold
+    // Short vibration when crossing the threshold in either direction.
+    LaunchedEffect(armed) { if (armed && !leaving) haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
+
+    val dragState = rememberDraggableState { delta ->
+        if (!leaving) scope.launch { offset.snapTo((offset.value + delta).coerceIn(-width.toFloat(), width.toFloat())) }
+    }
+    Box(
+        modifier.fillMaxWidth().onSizeChanged { width = it.width }
+            .draggable(
+                state = dragState,
+                orientation = Orientation.Horizontal,
+                enabled = writable && !leaving,
+                onDragStopped = {
+                    if (width > 0 && abs(offset.value) >= threshold) {
+                        leaving = true
+                        val target = sign(offset.value) * width * 1.05f
+                        // Accelerating ease-in: slow at the finger, fast at the edge.
+                        val remaining = abs(target - offset.value) / (width * 1.05f)
+                        offset.animateTo(
+                            target,
+                            tween(durationMillis = (SWIPE_FLY_OUT_MS * remaining).toInt().coerceAtLeast(90), easing = FastOutLinearInEasing),
+                        )
+                        // Removing the row lets the rows below slide up (animateItem).
+                        vm.swipeDelete(item)
+                    } else {
+                        offset.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+                    }
+                },
+            ),
+    ) {
+        if (offset.value != 0f) {
+            val fromStart = offset.value > 0
             Box(
-                Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 3.dp)
+                Modifier.matchParentSize().padding(horizontal = 12.dp, vertical = 3.dp)
                     .clip(RoundedCornerShape(8.dp))
                     // Turns strong red once releasing would delete.
                     .background(if (armed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.errorContainer)
@@ -456,8 +502,9 @@ private fun SwipeToDelete(item: TaskItem, state: UiState, vm: AppViewModel, cont
                     if (fromStart) Text(label, color = fg, style = MaterialTheme.typography.labelLarge)
                 }
             }
-        },
-    ) { content() }
+        }
+        Box(Modifier.graphicsLayer { translationX = offset.value }) { content() }
+    }
 }
 
 @Composable
