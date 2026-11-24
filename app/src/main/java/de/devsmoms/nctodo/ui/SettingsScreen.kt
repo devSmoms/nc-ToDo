@@ -91,6 +91,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -113,16 +115,18 @@ import java.time.format.DateTimeFormatter
 
 private const val SOURCE_URL = "https://github.com/devSmoms/nc-ToDo"
 private const val LICENSE_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
-private const val APACHE_URL = "https://www.apache.org/licenses/LICENSE-2.0"
+/** Third-party software shipped in the APK (incl. relevant transitive dependencies). */
+private data class Library(val name: String, val copyright: String, val license: String)
+private const val APACHE = "Apache-2.0"
+private const val BSD3 = "BSD-3-Clause"
 private val LIBRARIES = listOf(
-    "AndroidX (Core, Activity, Lifecycle, DataStore)",
-    "Jetpack Compose & Material 3",
-    "Material Icons",
-    "Jetpack Glance (Widgets)",
-    "WorkManager",
-    "Kotlin & kotlinx.coroutines",
-    "OkHttp & Okio",
-    "Reorderable (Calvin Liang)",
+    Library("AndroidX: Core, Activity, Lifecycle, WorkManager, Glance, DataStore", "The Android Open Source Project", APACHE),
+    Library("Jetpack Compose, Material 3, Material Icons", "The Android Open Source Project / Google", APACHE),
+    Library("Kotlin Standard Library, kotlinx.coroutines", "JetBrains s.r.o. and Kotlin contributors", APACHE),
+    Library("OkHttp, Okio", "Square, Inc.", APACHE),
+    Library("Guava ListenableFuture (in WorkManager)", "The Guava Authors", APACHE),
+    Library("Reorderable", "Calvin Liang", APACHE),
+    Library("Protocol Buffers Lite (in DataStore enthalten)", "Google Inc.", BSD3),
 )
 
 /** Same accent colors as the smart lists in the drawer. */
@@ -162,6 +166,7 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
     var accountDialog by remember { mutableStateOf(false) }
     var showLicense by remember { mutableStateOf(false) }
     var showLibraries by remember { mutableStateOf(false) }
+    var licenseText by remember { mutableStateOf<String?>(null) }
 
     // Back on a sub page returns to the overview (registered after the screen's own handler, so it wins).
     BackHandler(enabled = page != null) { pageName = null }
@@ -482,13 +487,40 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
             onDismissRequest = { showLibraries = false },
             title = { Text("Open-Source-Bibliotheken") },
             text = {
-                Text(
-                    LIBRARIES.joinToString("\n") { "• $it" } + "\n\nAlle stehen unter der Apache License 2.0.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    LIBRARIES.forEach { lib ->
+                        Text(lib.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "© ${lib.copyright} · ${lib.license}",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.size(10.dp))
+                    }
+                    Text(
+                        "Apache-2.0 und BSD-3-Clause sind mit der GPL v3 von NC Todo vereinbar. Die vollständigen Lizenztexte liegen der App bei:",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             },
             confirmButton = { TextButton(onClick = { showLibraries = false }) { Text("Schließen") } },
-            dismissButton = { TextButton(onClick = { openLink(context, APACHE_URL) }) { Text("Apache 2.0 öffnen") } },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { licenseText = "licenses/Apache-2.0.txt" }) { Text("Apache 2.0") }
+                    TextButton(onClick = { licenseText = "licenses/BSD-3-Clause.txt" }) { Text("BSD-3") }
+                }
+            },
+        )
+    }
+    licenseText?.let { asset ->
+        // Full license text bundled in the APK, readable offline.
+        val text = remember(asset) {
+            runCatching { context.assets.open(asset).bufferedReader().use { it.readText() } }.getOrElse { "Lizenztext nicht gefunden." }
+        }
+        AlertDialog(
+            onDismissRequest = { licenseText = null },
+            title = { Text(if (asset.contains("Apache")) "Apache License 2.0" else "BSD 3-Clause License (Protocol Buffers)") },
+            text = { Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.verticalScroll(rememberScrollState())) },
+            confirmButton = { TextButton(onClick = { licenseText = null }) { Text("Schließen") } },
         )
     }
     if (pickTime) {

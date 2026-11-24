@@ -103,4 +103,4 @@ Die Veröffentlichung dieses Programms erfolgt in der Hoffnung, dass es Ihnen vo
 
 Den vollständigen Lizenztext finden Sie in der Datei [LICENSE](LICENSE).
 
-Verwendete Bibliotheken (AndroidX, Jetpack Compose, Glance, WorkManager, OkHttp, Material Icons) stehen unter der Apache License 2.0, die mit der GPL-3.0 vereinbar ist.
+Die verwendeten Bibliotheken stehen unter Apache-2.0 bzw. BSD-3-Clause (Protocol Buffers in DataStore); beide sind mit der GPL-3.0 vereinbar. Details: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
