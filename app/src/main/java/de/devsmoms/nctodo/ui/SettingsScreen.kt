@@ -78,6 +78,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material.icons.outlined.UnfoldMore
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -116,22 +129,41 @@ private val SunColor = Color(0xFF9E7B00)
 private val StarColor = Color(0xFFC2185B)
 private val PlannedColor = Color(0xFF00897B)
 private val HomeColor = Color(0xFF2564CF)
+private val PurpleColor = Color(0xFF6A1B9A)
+private val GreyColor = Color(0xFF455A64)
 
 /** One entry of the start screen picker. */
 private data class StartOption(val value: String, val label: String, val icon: ImageVector, val tint: Color?)
 
+/** Sub pages of the settings; each has its own colour like a list. */
+private enum class SettingsPage(val title: String, val icon: ImageVector, val color: Color) {
+    APPEARANCE("Darstellung", Icons.Outlined.Palette, PurpleColor),
+    TASKS("Aufgaben", Icons.Outlined.TaskAlt, HomeColor),
+    SYNC("Synchronisierung", Icons.Outlined.Sync, PlannedColor),
+    NOTIFICATIONS("Benachrichtigungen", Icons.Outlined.Notifications, SunColor),
+    ABOUT("Über NC Todo", Icons.Outlined.Info, GreyColor),
+}
+
+/**
+ * Settings of the active account: an overview with the account card and one row per
+ * category; each category opens its own page with the same look as a task list.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState) {
     val s = state.settings
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val accent = MaterialTheme.colorScheme.primary
+    var pageName by rememberSaveable { mutableStateOf<String?>(null) }
+    val page = pageName?.let { n -> SettingsPage.entries.firstOrNull { it.name == n } }
     var pickTime by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
     var accountDialog by remember { mutableStateOf(false) }
     var showLicense by remember { mutableStateOf(false) }
     var showLibraries by remember { mutableStateOf(false) }
+
+    // Back on a sub page returns to the overview (registered after the screen's own handler, so it wins).
+    BackHandler(enabled = page != null) { pageName = null }
 
     // Turning on a notification type first asks for the Android 13+ permission.
     var pendingEnable by remember { mutableStateOf<((Settings) -> Settings)?>(null) }
@@ -141,14 +173,14 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
         if (granted && change != null) vm.updateSettings(change)
         else if (!granted) scope.launch { snackbar.showSnackbar("Ohne Berechtigung kann die App keine Benachrichtigungen anzeigen") }
     }
-    fun enableNotification(change: (Settings) -> Settings) {
-        val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+    fun setNotification(on: Boolean, change: (Settings, Boolean) -> Settings) {
+        val needsPermission = on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         if (needsPermission) {
-            pendingEnable = change
+            pendingEnable = { change(it, true) }
             permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            vm.updateSettings(change)
+            vm.updateSettings { change(it, on) }
         }
     }
 
@@ -165,268 +197,264 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
     }
     val currentStart = startOptions.firstOrNull { it.value == s.startScreen }
         ?: StartOption(s.startScreen, "Liste nicht mehr vorhanden", ListIcons.DEFAULT, null)
+    val reminderTime = "%02d:%02d".format(s.dueTimeMinutes / 60, s.dueTimeMinutes % 60)
+    val lastSync = state.lastSync?.let {
+        DateTimeFormatter.ofPattern("dd.MM., HH:mm").format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = {},
-                navigationIcon = { IconButton(onClick = vm::back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Zurück") } },
+                navigationIcon = {
+                    IconButton(onClick = { if (page != null) pageName = null else vm.back() }) {
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Zurück")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
             item {
-                // Same big header as the task lists.
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                    Text("Einstellungen", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = accent)
-                    // Settings are stored per account; make that visible when there is more than one.
-                    if (state.accounts.size > 1) {
-                        Text(
-                            "Gelten für ${state.credentials?.displayName.orEmpty()}",
-                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                // Same big coloured header as the task lists.
+                PageHeader(
+                    title = page?.title ?: "Einstellungen",
+                    color = page?.color ?: MaterialTheme.colorScheme.primary,
+                    subtitle = if (page == null && state.accounts.size > 1) "Gelten nur für dieses Konto" else null,
+                )
+            }
+            when (page) {
+                null -> {
+                    item {
+                        AccountCard(state) { accountDialog = true }
+                    }
+                    item {
+                        SettingsCard {
+                            CategoryRow(SettingsPage.APPEARANCE, "${s.theme.label} · Start: ${currentStart.label}") { pageName = it.name }
+                            RowDivider()
+                            CategoryRow(SettingsPage.TASKS, "Fälligkeit, Deck-Listen, Links") { pageName = it.name }
+                            RowDivider()
+                            CategoryRow(
+                                SettingsPage.SYNC,
+                                when {
+                                    state.syncing -> "Synchronisiere …"
+                                    state.pendingCount > 0 -> "${state.pendingCount} Änderung(en) ausstehend"
+                                    state.offline -> "Offline"
+                                    else -> "Zuletzt ${lastSync ?: "noch nie"}"
+                                },
+                            ) { pageName = it.name }
+                            RowDivider()
+                            CategoryRow(
+                                SettingsPage.NOTIFICATIONS,
+                                listOfNotNull(
+                                    if (s.notifyDue) "Erinnerung $reminderTime Uhr" else null,
+                                    if (s.notifySharedChanges) "Geteilte Listen" else null,
+                                ).joinToString(" · ").ifEmpty { "Aus" },
+                            ) { pageName = it.name }
+                        }
+                    }
+                    item { Spacer(Modifier.size(12.dp)) }
+                    item {
+                        SettingsCard {
+                            CategoryRow(SettingsPage.ABOUT, "Version ${BuildConfig.VERSION_NAME} · GPL v3") { pageName = it.name }
+                        }
+                    }
+                    item { Spacer(Modifier.size(12.dp)) }
+                    item {
+                        SettingsCard {
+                            SettingRow(
+                                icon = Icons.AutoMirrored.Outlined.Logout, tint = MaterialTheme.colorScheme.error,
+                                title = "Abmelden", titleColor = MaterialTheme.colorScheme.error,
+                                onClick = { confirmLogout = true },
+                            )
+                        }
+                        Hint("Beim Abmelden werden alle Daten dieses Kontos von diesem Gerät gelöscht.")
                     }
                 }
-            }
 
-            // ------------------------------------------------ start & appearance
-            item { SectionLabel("Allgemein") }
-            item {
-                SettingsCard {
-                    PickerRow(
-                        icon = currentStart.icon, tint = currentStart.tint ?: accent,
-                        title = "Startbildschirm",
-                        subtitle = "Womit sich die App öffnet",
-                        value = currentStart.label,
-                        options = startOptions.map { Triple(it.label, it.icon, it.tint ?: accent) to it.value },
-                    ) { v -> vm.updateSettings { it.copy(startScreen = v) } }
-                    RowDivider()
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp)) {
-                        Icon(Icons.Outlined.Palette, null, tint = accent)
-                        Spacer(Modifier.width(16.dp))
-                        SingleChoiceSegmentedButtonRow(Modifier.weight(1f)) {
-                            ThemeMode.entries.forEachIndexed { i, mode ->
-                                SegmentedButton(
-                                    selected = s.theme == mode,
-                                    onClick = { vm.updateSettings { it.copy(theme = mode) } },
-                                    shape = SegmentedButtonDefaults.itemShape(i, ThemeMode.entries.size),
-                                ) { Text(mode.label, maxLines = 1) }
+                SettingsPage.APPEARANCE -> {
+                    val c = page.color
+                    item { SectionLabel("Design") }
+                    item {
+                        SettingsCard {
+                            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(12.dp)) {
+                                ThemeMode.entries.forEachIndexed { i, mode ->
+                                    SegmentedButton(
+                                        selected = s.theme == mode,
+                                        onClick = { vm.updateSettings { it.copy(theme = mode) } },
+                                        shape = SegmentedButtonDefaults.itemShape(i, ThemeMode.entries.size),
+                                    ) { Text(mode.label, maxLines = 1) }
+                                }
                             }
                         }
                     }
-                }
-            }
-
-            // ------------------------------------------------ tasks
-            item { SectionLabel("Aufgaben") }
-            item {
-                SettingsCard {
-                    SettingRow(
-                        icon = Icons.Outlined.CalendarMonth, tint = PlannedColor,
-                        title = "Fälligkeit standardmäßig ganztägig",
-                        subtitle = if (s.allDayDefault) "Uhrzeit nur, wenn du „Ganztägig“ ausschaltest" else "Nach dem Datum wird immer nach einer Uhrzeit gefragt",
-                        onClick = { vm.updateSettings { it.copy(allDayDefault = !it.allDayDefault) } },
-                        trailing = { Switch(checked = s.allDayDefault, onCheckedChange = { on -> vm.updateSettings { it.copy(allDayDefault = on) } }) },
-                    )
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.AutoMirrored.Outlined.HelpOutline, tint = accent,
-                        title = "Vor dem Entfernen nachfragen",
-                        subtitle = "Rückfrage beim Entfernen von Links, Fälligkeit und Schritten",
-                        onClick = { vm.updateSettings { it.copy(confirmRemovals = !it.confirmRemovals) } },
-                        trailing = { Switch(checked = s.confirmRemovals, onCheckedChange = { on -> vm.updateSettings { it.copy(confirmRemovals = on) } }) },
-                    )
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.Outlined.ViewKanban, tint = accent,
-                        title = "Deck-Listen ausblenden",
-                        subtitle = "Listen, deren Name mit „Deck:“ beginnt (Boards aus Nextcloud Deck)",
-                        onClick = { vm.updateSettings { it.copy(hideDeckLists = !it.hideDeckLists) } },
-                        trailing = { Switch(checked = s.hideDeckLists, onCheckedChange = { on -> vm.updateSettings { it.copy(hideDeckLists = on) } }) },
-                    )
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.Outlined.Link, tint = accent,
-                        title = "Link-Vorschau laden",
-                        subtitle = "Titel und Bild der verlinkten Seite anzeigen – ruft dazu die Webseite auf",
-                        onClick = { vm.updateSettings { it.copy(linkPreviews = !it.linkPreviews) } },
-                        trailing = { Switch(checked = s.linkPreviews, onCheckedChange = { on -> vm.updateSettings { it.copy(linkPreviews = on) } }) },
-                    )
-                }
-            }
-
-            // ------------------------------------------------ sync
-            item { SectionLabel("Synchronisierung") }
-            item {
-                SettingsCard {
-                    PickerRow(
-                        icon = Icons.Outlined.PhoneAndroid, tint = accent,
-                        title = "Beim Öffnen der App",
-                        value = s.openSync.label,
-                        options = OpenSync.entries.map { Triple(it.label, null, null) to it },
-                    ) { v -> vm.updateSettings { it.copy(openSync = v) } }
-                    if (s.openSync == OpenSync.AFTER_INACTIVITY) {
-                        RowDivider()
-                        PickerRow(
-                            icon = Icons.Outlined.Bedtime, tint = accent,
-                            title = "Pause ab",
-                            subtitle = "Synchronisiert, wenn die App so lange nicht benutzt wurde",
-                            value = Settings.minutes(s.inactivityMin),
-                            options = Settings.INACTIVITY_OPTIONS.map { Triple(Settings.minutes(it), null, null) to it },
-                        ) { v -> vm.updateSettings { it.copy(inactivityMin = v) } }
+                    item { SectionLabel("Beim Öffnen") }
+                    item {
+                        SettingsCard {
+                            PickerRow(
+                                icon = currentStart.icon, tint = currentStart.tint ?: c,
+                                title = "Startbildschirm",
+                                value = currentStart.label,
+                                options = startOptions.map { Triple(it.label, it.icon, it.tint ?: c) to it.value },
+                            ) { v -> vm.updateSettings { it.copy(startScreen = v) } }
+                        }
                     }
-                    RowDivider()
-                    PickerRow(
-                        icon = Icons.Outlined.Timer, tint = accent,
-                        title = "Während die App geöffnet ist",
-                        subtitle = "Regelmäßig nach Änderungen anderer suchen",
-                        value = Settings.seconds(s.foregroundIntervalSec),
-                        options = Settings.FOREGROUND_OPTIONS.map { Triple(Settings.seconds(it), null, null) to it },
-                    ) { v -> vm.updateSettings { it.copy(foregroundIntervalSec = v) } }
-                    RowDivider()
-                    PickerRow(
-                        icon = Icons.Outlined.CloudSync, tint = accent,
-                        title = "Im Hintergrund",
-                        subtitle = "Android erlaubt höchstens alle 15 Minuten",
-                        value = Settings.minutes(s.backgroundIntervalMin),
-                        options = Settings.BACKGROUND_OPTIONS.map { Triple(Settings.minutes(it), null, null) to it },
-                    ) { v -> vm.updateSettings { it.copy(backgroundIntervalMin = v) } }
-                    RowDivider()
-                    val last = state.lastSync?.let {
-                        DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm").format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()))
-                    }
-                    SettingRow(
-                        icon = Icons.Outlined.Sync, tint = accent,
-                        title = if (state.syncing) "Synchronisiere …" else "Zuletzt: ${last ?: "noch nie"}",
-                        subtitle = when {
-                            state.pendingCount > 0 -> "${state.pendingCount} Änderung(en) warten auf Übertragung" + if (state.offline) " (offline)" else ""
-                            state.offline -> "Server nicht erreichbar – Offline-Daten werden angezeigt"
-                            else -> "Alles übertragen"
-                        },
-                        trailing = { TextButton(onClick = vm::refresh, enabled = !state.syncing) { Text("Jetzt") } },
-                    )
                 }
-                Hint("Eigene Änderungen werden immer sofort übertragen – ohne Verbindung automatisch, sobald wieder Netz da ist.")
-            }
 
-            // ------------------------------------------------ notifications
-            item { SectionLabel("Benachrichtigungen") }
-            item {
-                val time = "%02d:%02d".format(s.dueTimeMinutes / 60, s.dueTimeMinutes % 60)
-                SettingsCard {
-                    SettingRow(
-                        icon = Icons.Outlined.Notifications, tint = SunColor,
-                        title = "Fällige Aufgaben",
-                        subtitle = "Täglich an heute fällige Aufgaben erinnern",
-                        onClick = { if (!s.notifyDue) enableNotification { it.copy(notifyDue = true) } else vm.updateSettings { it.copy(notifyDue = false) } },
-                        trailing = {
-                            Switch(checked = s.notifyDue, onCheckedChange = { on ->
-                                if (on) enableNotification { it.copy(notifyDue = true) } else vm.updateSettings { it.copy(notifyDue = false) }
-                            })
-                        },
-                    )
-                    if (s.notifyDue) {
-                        RowDivider()
-                        SettingRow(
-                            icon = Icons.Outlined.Schedule, tint = accent,
-                            title = "Uhrzeit", onClick = { pickTime = true },
-                            trailing = { ValueText("$time Uhr") },
+                SettingsPage.TASKS -> {
+                    val c = page.color
+                    item { SectionLabel("Neue Aufgaben") }
+                    item {
+                        SettingsCard {
+                            SwitchRow(Icons.Outlined.CalendarMonth, c, "Fälligkeit ganztägig", "Ohne Uhrzeit, außer du wählst eine", s.allDayDefault) { on ->
+                                vm.updateSettings { it.copy(allDayDefault = on) }
+                            }
+                        }
+                    }
+                    item { SectionLabel("Anzeige") }
+                    item {
+                        SettingsCard {
+                            SwitchRow(Icons.Outlined.ViewKanban, c, "Deck-Listen ausblenden", "Listen, die mit „Deck:“ beginnen", s.hideDeckLists) { on ->
+                                vm.updateSettings { it.copy(hideDeckLists = on) }
+                            }
+                            RowDivider()
+                            SwitchRow(Icons.Outlined.Link, c, "Link-Vorschau", "Titel und Bild der Webseite laden", s.linkPreviews) { on ->
+                                vm.updateSettings { it.copy(linkPreviews = on) }
+                            }
+                        }
+                    }
+                    item { SectionLabel("Bearbeiten") }
+                    item {
+                        SettingsCard {
+                            SwitchRow(
+                                Icons.AutoMirrored.Outlined.HelpOutline, c, "Vor dem Entfernen nachfragen",
+                                "Bei Links, Fälligkeit und Schritten", s.confirmRemovals,
+                            ) { on -> vm.updateSettings { it.copy(confirmRemovals = on) } }
+                        }
+                    }
+                }
+
+                SettingsPage.SYNC -> {
+                    val c = page.color
+                    item { SyncStatusCard(state, lastSync, c, vm::refresh) }
+                    item { SectionLabel("Automatisch synchronisieren") }
+                    item {
+                        SettingsCard {
+                            PickerRow(
+                                icon = Icons.Outlined.PhoneAndroid, tint = c,
+                                title = "Beim Öffnen",
+                                value = s.openSync.label,
+                                options = OpenSync.entries.map { Triple(it.label, null, null) to it },
+                            ) { v -> vm.updateSettings { it.copy(openSync = v) } }
+                            if (s.openSync == OpenSync.AFTER_INACTIVITY) {
+                                RowDivider()
+                                PickerRow(
+                                    icon = Icons.Outlined.Bedtime, tint = c,
+                                    title = "Pause ab",
+                                    value = Settings.minutes(s.inactivityMin),
+                                    options = Settings.INACTIVITY_OPTIONS.map { Triple(Settings.minutes(it), null, null) to it },
+                                ) { v -> vm.updateSettings { it.copy(inactivityMin = v) } }
+                            }
+                            RowDivider()
+                            PickerRow(
+                                icon = Icons.Outlined.Timer, tint = c,
+                                title = "App geöffnet",
+                                value = Settings.seconds(s.foregroundIntervalSec),
+                                options = Settings.FOREGROUND_OPTIONS.map { Triple(Settings.seconds(it), null, null) to it },
+                            ) { v -> vm.updateSettings { it.copy(foregroundIntervalSec = v) } }
+                            RowDivider()
+                            PickerRow(
+                                icon = Icons.Outlined.CloudSync, tint = c,
+                                title = "Im Hintergrund",
+                                value = Settings.minutes(s.backgroundIntervalMin),
+                                options = Settings.BACKGROUND_OPTIONS.map { Triple(Settings.minutes(it), null, null) to it },
+                            ) { v -> vm.updateSettings { it.copy(backgroundIntervalMin = v) } }
+                        }
+                        Hint(
+                            "Eigene Änderungen werden immer sofort übertragen – ohne Netz automatisch, sobald wieder eine Verbindung besteht. " +
+                                "Im Hintergrund erlaubt Android höchstens alle 15 Minuten.",
                         )
                     }
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.Outlined.People, tint = PlannedColor,
-                        title = "Änderungen in geteilten Listen",
-                        subtitle = "Wenn andere Aufgaben hinzufügen oder erledigen",
-                        onClick = {
-                            if (!s.notifySharedChanges) enableNotification { it.copy(notifySharedChanges = true) }
-                            else vm.updateSettings { it.copy(notifySharedChanges = false) }
-                        },
-                        trailing = {
-                            Switch(checked = s.notifySharedChanges, onCheckedChange = { on ->
-                                if (on) enableNotification { it.copy(notifySharedChanges = true) } else vm.updateSettings { it.copy(notifySharedChanges = false) }
-                            })
-                        },
-                    )
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.AutoMirrored.Outlined.OpenInNew, tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        title = "Systemeinstellungen",
-                        subtitle = "Ton, Vibration und Sperrbildschirm",
-                        onClick = {
-                            val intent = Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                .putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName)
-                            runCatching { context.startActivity(intent) }
-                        },
-                    )
                 }
-            }
 
-            // ------------------------------------------------ account
-            item { SectionLabel("Konto") }
-            item {
-                SettingsCard {
-                    SettingRow(
-                        icon = Icons.Outlined.Person, tint = accent,
-                        title = state.credentials?.displayName.orEmpty(),
-                        subtitle = "${state.credentials?.username} · ${state.credentials?.serverUrl?.let(::serverLabel)}",
-                    )
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.Outlined.SwitchAccount, tint = accent,
-                        title = "Konto wechseln oder hinzufügen",
-                        subtitle = if (state.accounts.size > 1) "${state.accounts.size} Konten auf diesem Gerät" else "Weitere Nextcloud-Konten verbinden",
-                        onClick = { accountDialog = true },
-                    )
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.Outlined.Lock, tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        title = "Verschlüsselt gespeichert",
-                        subtitle = "Zugangsdaten und Offline-Daten sind mit einem Hardware-Schlüssel dieses Geräts geschützt",
-                    )
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.AutoMirrored.Outlined.Logout, tint = MaterialTheme.colorScheme.error,
-                        title = "Von diesem Konto abmelden", titleColor = MaterialTheme.colorScheme.error,
-                        subtitle = "Löscht alle Daten des Kontos auf diesem Gerät",
-                        onClick = { confirmLogout = true },
-                    )
+                SettingsPage.NOTIFICATIONS -> {
+                    val c = page.color
+                    item { SectionLabel("Erinnern") }
+                    item {
+                        SettingsCard {
+                            SwitchRow(Icons.Outlined.WbSunny, c, "Fällige Aufgaben", "Einmal täglich", s.notifyDue) { on ->
+                                setNotification(on) { st, v -> st.copy(notifyDue = v) }
+                            }
+                            if (s.notifyDue) {
+                                RowDivider()
+                                SettingRow(
+                                    icon = Icons.Outlined.Schedule, tint = c,
+                                    title = "Uhrzeit", onClick = { pickTime = true },
+                                    trailing = { ValueText("$reminderTime Uhr") },
+                                )
+                            }
+                        }
+                    }
+                    item { SectionLabel("Geteilte Listen") }
+                    item {
+                        SettingsCard {
+                            SwitchRow(Icons.Outlined.People, c, "Änderungen anderer", "Neue und erledigte Aufgaben", s.notifySharedChanges) { on ->
+                                setNotification(on) { st, v -> st.copy(notifySharedChanges = v) }
+                            }
+                        }
+                    }
+                    item { Spacer(Modifier.size(12.dp)) }
+                    item {
+                        SettingsCard {
+                            SettingRow(
+                                icon = Icons.AutoMirrored.Outlined.OpenInNew, tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                title = "Ton und Sperrbildschirm",
+                                subtitle = "Android-Einstellungen öffnen",
+                                onClick = {
+                                    val intent = Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                        .putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName)
+                                    runCatching { context.startActivity(intent) }
+                                },
+                            )
+                        }
+                        Hint("Auf dem Sperrbildschirm zeigt NC Todo nur die Anzahl, keine Aufgabentitel.")
+                    }
                 }
-            }
 
-            // ------------------------------------------------ about (GPL: show license and source)
-            item { SectionLabel("Über NC Todo") }
-            item {
-                SettingsCard {
-                    SettingRow(
-                        icon = Icons.Outlined.Info, tint = accent,
-                        title = "Version",
-                        trailing = { ValueText("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})") },
-                    )
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.Outlined.Code, tint = accent,
-                        title = "Quellcode auf GitHub",
-                        subtitle = SOURCE_URL.removePrefix("https://"),
-                        onClick = { openLink(context, SOURCE_URL) },
-                    )
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.Outlined.Gavel, tint = accent,
-                        title = "Lizenz: GNU GPL v3",
-                        subtitle = "Freie Software – Bedingungen anzeigen",
-                        onClick = { showLicense = true },
-                    )
-                    RowDivider()
-                    SettingRow(
-                        icon = Icons.Outlined.Widgets, tint = accent,
-                        title = "Verwendete Open-Source-Bibliotheken",
-                        onClick = { showLibraries = true },
-                    )
+                SettingsPage.ABOUT -> {
+                    val c = page.color
+                    item {
+                        SettingsCard {
+                            SettingRow(
+                                icon = Icons.Outlined.Info, tint = c, title = "Version",
+                                trailing = { ValueText("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})") },
+                            )
+                            RowDivider()
+                            SettingRow(
+                                icon = Icons.Outlined.Code, tint = c, title = "Quellcode auf GitHub",
+                                onClick = { openLink(context, SOURCE_URL) },
+                                trailing = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            )
+                            RowDivider()
+                            SettingRow(icon = Icons.Outlined.Gavel, tint = c, title = "Lizenz: GNU GPL v3", onClick = { showLicense = true }, trailing = { Chevron() })
+                            RowDivider()
+                            SettingRow(icon = Icons.Outlined.Widgets, tint = c, title = "Open-Source-Bibliotheken", onClick = { showLibraries = true }, trailing = { Chevron() })
+                        }
+                    }
+                    item { SectionLabel("Sicherheit") }
+                    item {
+                        SettingsCard {
+                            SettingRow(
+                                icon = Icons.Outlined.Lock, tint = c,
+                                title = "Verschlüsselt gespeichert",
+                                subtitle = "Zugangsdaten und Offline-Daten sind mit einem Hardware-Schlüssel dieses Geräts geschützt",
+                            )
+                        }
+                        Hint("Copyright © 2026 devSmoms · Inoffizielle App, kein Produkt der Nextcloud GmbH.")
+                    }
                 }
-                Hint("Copyright © 2026 devSmoms · Inoffizielle App, kein Produkt der Nextcloud GmbH.")
             }
         }
     }
@@ -501,13 +529,126 @@ fun SettingsScreen(state: UiState, vm: AppViewModel, snackbar: SnackbarHostState
     }
 }
 
+// ---------------------------------------------------------------- page parts
+
+@Composable
+private fun PageHeader(title: String, color: Color, subtitle: String?) {
+    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 12.dp)) {
+        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = color)
+        if (subtitle != null) {
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Active account at the top of the overview; tapping it opens the account switcher. */
+@Composable
+private fun AccountCard(state: UiState, onClick: () -> Unit) {
+    val creds = state.credentials ?: return
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            AccountAvatar(creds.displayName, state.activeAccount, 48.dp)
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(creds.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${creds.username} · ${serverLabel(creds.serverUrl)}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    if (state.accounts.size > 1) "Konto wechseln · ${state.accounts.size} Konten" else "Konto wechseln oder hinzufügen",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Icon(Icons.Outlined.UnfoldMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Overview row: coloured icon badge, title, one-line summary of the current values. */
+@Composable
+private fun CategoryRow(page: SettingsPage, summary: String, onOpen: (SettingsPage) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable { onOpen(page) }
+            .heightIn(min = 64.dp).padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+    ) {
+        Box(
+            Modifier.size(36.dp).clip(CircleShape).background(page.color.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(page.icon, null, Modifier.size(20.dp), tint = page.color) }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(page.title)
+            Text(
+                summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Chevron()
+    }
+}
+
+/** Sync state at the top of the sync page with a manual "sync now". */
+@Composable
+private fun SyncStatusCard(state: UiState, lastSync: String?, color: Color, onSync: () -> Unit) {
+    val (icon, title) = when {
+        state.syncing -> Icons.Outlined.Sync to "Synchronisiere …"
+        state.offline -> Icons.Outlined.CloudOff to "Offline"
+        state.pendingCount > 0 -> Icons.Outlined.CloudUpload to "${state.pendingCount} Änderung(en) ausstehend"
+        else -> Icons.Outlined.CloudDone to "Alles synchronisiert"
+    }
+    SettingsCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(16.dp)) {
+            Box(
+                Modifier.size(44.dp).clip(CircleShape).background(color.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (state.syncing) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = color)
+                else Icon(icon, null, tint = color)
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (state.offline) "Server nicht erreichbar – Offline-Daten werden angezeigt" else "Zuletzt: ${lastSync ?: "noch nie"}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            FilledTonalButton(onClick = onSync, enabled = !state.syncing) { Text("Jetzt") }
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(icon: ImageVector, tint: Color, title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+    SettingRow(
+        icon = icon, tint = tint, title = title, subtitle = subtitle,
+        onClick = { onChange(!checked) },
+        trailing = { Switch(checked = checked, onCheckedChange = onChange) },
+    )
+}
+
+@Composable
+private fun Chevron() {
+    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
 // ---------------------------------------------------------------- building blocks
 
 @Composable
 private fun SectionLabel(text: String) {
     Text(
         text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 6.dp),
+        modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 6.dp),
     )
 }
 
@@ -515,7 +656,7 @@ private fun SectionLabel(text: String) {
 @Composable
 private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         tonalElevation = 1.dp,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
     ) { Column(content = content) }
